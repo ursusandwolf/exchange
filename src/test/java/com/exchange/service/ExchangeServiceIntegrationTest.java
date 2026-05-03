@@ -25,8 +25,8 @@ class ExchangeServiceIntegrationTest {
     @Test
     void shouldExecuteTradeAndPersistBalances() {
         // 1. Регистрация пользователей
-        User alice = exchangeService.registerUser("Alice");
-        User bob = exchangeService.registerUser("Bob");
+        User alice = exchangeService.registerUser("Alice", "password123");
+        User bob = exchangeService.registerUser("Bob", "password123");
 
         // 2. Пополнение балансов
         alice.getWallet().credit("USDT", new BigDecimal("50000"));

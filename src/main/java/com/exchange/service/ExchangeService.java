@@ -11,6 +11,7 @@ import com.exchange.model.Wallet;
 import com.exchange.repository.OrderRepository;
 import com.exchange.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,6 +31,7 @@ public class ExchangeService {
     
     private final UserRepository userRepository;
     private final OrderRepository orderRepository;
+    private final PasswordEncoder passwordEncoder;
     
     // Стаканы по торговым парам всё еще в памяти для скорости
     private final Map<String, OrderBook> orderBooks = new ConcurrentHashMap<>();
@@ -41,14 +43,17 @@ public class ExchangeService {
      * Регистрирует нового пользователя.
      */
     @Transactional
-    public User registerUser(String username) {
+    public User registerUser(String username, String password) {
         if (username == null || username.isBlank()) {
             throw new IllegalArgumentException("Имя пользователя не может быть пустым");
+        }
+        if (password == null || password.length() < 6) {
+            throw new IllegalArgumentException("Пароль должен быть не менее 6 символов");
         }
         if (userRepository.findByUsername(username).isPresent()) {
             throw new IllegalArgumentException("Пользователь с таким именем уже существует");
         }
-        User user = new User(username);
+        User user = new User(username, passwordEncoder.encode(password));
         return userRepository.save(user);
     }
 

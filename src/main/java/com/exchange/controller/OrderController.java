@@ -1,13 +1,19 @@
 package com.exchange.controller;
 
-import com.exchange.enums.Side;
+import com.exchange.dto.OrderRequest;
+import com.exchange.dto.TradeResponse;
 import com.exchange.model.Trade;
 import com.exchange.model.User;
+import com.exchange.repository.UserRepository;
 import com.exchange.service.ExchangeService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
-import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 
 @RestController
@@ -16,18 +22,34 @@ import java.util.List;
 public class OrderController {
 
     private final ExchangeService exchangeService;
+    private final UserRepository userRepository;
 
     @PostMapping("/submit")
-    public List<Trade> submitOrder(
-            @RequestParam String userId,
-            @RequestParam String baseAsset,
-            @RequestParam String quoteAsset,
-            @RequestParam Side side,
-            @RequestParam BigDecimal quantity,
-            @RequestParam(required = false) BigDecimal price) {
-        
-        User user = exchangeService.getUser(userId);
-        return exchangeService.submitOrder(user, baseAsset, quoteAsset, side, quantity, price);
+    public List<TradeResponse> submitOrder(@RequestBody @Valid OrderRequest request) {
+        UserDetails userDetails = (UserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        User user = userRepository.findByUsername(userDetails.getUsername())
+                .orElseThrow(() -> new IllegalArgumentException("Authenticated user not found"));
+
+        List<Trade> trades = exchangeService.submitOrder(
+            user, 
+            request.baseAsset(), 
+            request.quoteAsset(), 
+            request.side(), 
+            request.quantity(), 
+            request.price()
+        );
+
+        return trades.stream()
+            .map(t -> new TradeResponse(
+                t.getId(),
+                t.getBuyOrder().getId(),
+                t.getSellOrder().getId(),
+                t.getPrice(),
+                t.getQuantity(),
+                t.getTotalAmount(),
+                LocalDateTime.ofInstant(t.getTimestamp(), ZoneId.systemDefault())
+            ))
+            .toList();
     }
 
     @GetMapping("/stats")

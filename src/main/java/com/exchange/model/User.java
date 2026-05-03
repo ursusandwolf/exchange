@@ -24,13 +24,17 @@ public class User {
     @Column(unique = true, nullable = false)
     private String username;
 
+    @Column(nullable = false)
+    private String password;
+
     @OneToOne(cascade = CascadeType.ALL, fetch = FetchType.EAGER)
     @JoinColumn(name = "wallet_id", referencedColumnName = "ownerId")
     private Wallet wallet;
 
-    public User(String username) {
+    public User(String username, String password) {
         this.id = UUID.randomUUID().toString();
         this.username = username;
+        this.password = password;
         this.wallet = new Wallet(this.id);
     }
 
