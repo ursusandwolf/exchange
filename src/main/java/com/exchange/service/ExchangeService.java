@@ -1,7 +1,9 @@
 package com.exchange.service;
 
+import com.exchange.engine.MatchResult;
 import com.exchange.engine.MatchingEngine;
 import com.exchange.engine.OrderBook;
+import com.exchange.enums.OrderStatus;
 import com.exchange.enums.OrderType;
 import com.exchange.enums.Side;
 import com.exchange.model.Order;
@@ -10,10 +12,14 @@ import com.exchange.model.User;
 import com.exchange.model.Wallet;
 import com.exchange.repository.OrderRepository;
 import com.exchange.repository.UserRepository;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -27,6 +33,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class ExchangeService {
     
     private final UserRepository userRepository;
@@ -38,6 +45,23 @@ public class ExchangeService {
     
     // Движок сведения ордеров
     private final MatchingEngine matchingEngine = new MatchingEngine();
+
+    /**
+     * Инициализация стаканов при старте приложения на основе активных ордеров в БД.
+     */
+    @PostConstruct
+    public void recoverOrderBooks() {
+        log.info("Starting OrderBook recovery from database...");
+        List<Order> activeOrders = orderRepository.findByStatusInOrderByCreatedAtAsc(
+                List.of(OrderStatus.PENDING, OrderStatus.PARTIALLY_FILLED)
+        );
+        
+        for (Order order : activeOrders) {
+            OrderBook orderBook = getOrderBook(order.getBaseAsset(), order.getQuoteAsset());
+            orderBook.addOrder(order);
+        }
+        log.info("Recovered {} active orders into {} order books", activeOrders.size(), orderBooks.size());
+    }
 
     /**
      * Регистрирует нового пользователя.
@@ -97,13 +121,26 @@ public class ExchangeService {
         validateAndReserve(wallet, order);
         
         // Запускаем matching engine
-        List<Trade> trades = matchingEngine.match(orderBook, order);
+        MatchResult result = matchingEngine.match(orderBook, order);
         
         // Обрабатываем результаты сделок
-        for (Trade trade : trades) {
+        for (Trade trade : result.getTrades()) {
             settleTrade(trade);
         }
         
+        // Синхронизируем состояние стакана в памяти ПОСЛЕ коммита в БД
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                for (Order toRemove : result.getOrdersToRemove()) {
+                    orderBook.removeOrder(toRemove);
+                }
+                if (result.getRemainingOrder() != null) {
+                    orderBook.addOrder(result.getRemainingOrder());
+                }
+            }
+        });
+
         // Обновляем состояние резерва
         if (order.isActive()) {
             adjustReservedAmount(wallet, order);
@@ -114,7 +151,7 @@ public class ExchangeService {
         orderRepository.save(order);
         userRepository.save(user);
         
-        return trades;
+        return result.getTrades();
     }
 
     private void validateSubmitOrderInputs(User user, String baseAsset, String quoteAsset, BigDecimal quantity, BigDecimal price) {
@@ -258,7 +295,6 @@ public class ExchangeService {
         if (orderBook == null) {
             return "Стакан не найден: " + symbol;
         }
-        return "Стакан " + symbol + ": " + orderBook.getBidCount() + " bids, " 
-               + orderBook.getAskCount() + " asks";
+        return "Стакан " + symbol + ": " + orderBook.getBids().size() + " price levels";
     }
 }

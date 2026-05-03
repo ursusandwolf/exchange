@@ -11,121 +11,77 @@ import java.util.List;
 
 /**
  * Matching Engine — движок сведения ордеров.
- * Отвечает за исполнение сделок между ордерами на покупку и продажу.
- * 
- * Правила matching:
- * 1. Если цена BUY >= лучшей цены SELL — сделка исполняется
- * 2. MARKET ордера исполняются по лучшей доступной цене
- * 3. Частичное исполнение разрешено
- * 4. Приоритет: цена, затем время (FIFO внутри одной цены)
+ * Отвечает за расчет сделок. Не изменяет OrderBook напрямую, 
+ * а возвращает MatchResult с инструкциями по обновлению.
  */
 public class MatchingEngine {
     
     /**
-     * Обрабатывает новый ордер и возвращает список совершённых сделок.
+     * Вычисляет сделки для входящего ордера.
+     * НЕ изменяет состояние стакана.
      */
-    public synchronized List<Trade> match(OrderBook orderBook, Order incomingOrder) {
+    public MatchResult match(OrderBook orderBook, Order incomingOrder) {
         List<Trade> trades = new ArrayList<>();
+        List<Order> ordersToRemove = new ArrayList<>();
         
-        // Пока ордер активен и есть ордера для сведения
+        // Клонируем входящий ордер для расчетов (чтобы не менять оригинал раньше времени)
+        // Но в этой реализации мы будем аккуратно менять оригинал, 
+        // так как он еще не в стакане.
+        
         while (incomingOrder.isActive() && orderBook.hasMatchingOrders(incomingOrder)) {
-            Order contraOrder = getContraOrder(orderBook, incomingOrder);
+            Order contraOrder = getContraOrder(orderBook, incomingOrder, ordersToRemove);
             if (contraOrder == null || !contraOrder.isActive()) {
                 break;
             }
             
-            Trade trade = executeTrade(orderBook, incomingOrder, contraOrder);
+            Trade trade = calculateTrade(incomingOrder, contraOrder);
             if (trade != null) {
                 trades.add(trade);
+                if (!contraOrder.isActive()) {
+                    ordersToRemove.add(contraOrder);
+                }
+            } else {
+                break;
             }
         }
         
-        // Если ордер всё ещё активен после matching — добавляем его в стакан
-        if (incomingOrder.isActive()) {
-            orderBook.addOrder(incomingOrder);
-        }
+        Order remainingOrder = incomingOrder.isActive() ? incomingOrder : null;
         
-        return trades;
+        return new MatchResult(trades, ordersToRemove, remainingOrder);
     }
 
-    /**
-     * Получает противоположный ордер из стакана.
-     */
-    private Order getContraOrder(OrderBook orderBook, Order incomingOrder) {
+    private Order getContraOrder(OrderBook orderBook, Order incomingOrder, List<Order> alreadyRemoved) {
+        // Нам нужно пропустить те, что мы уже пометили на удаление в этом цикле
         if (incomingOrder.getSide() == Side.BUY) {
-            return orderBook.getBestAskOrder();
+            return orderBook.getBestAskOrderExcluding(alreadyRemoved);
         } else {
-            return orderBook.getBestBidOrder();
+            return orderBook.getBestBidOrderExcluding(alreadyRemoved);
         }
     }
 
-    /**
-     * Исполняет сделку между двумя ордерами.
-     * 
-     * @return Совершённая сделка или null, если сделка не состоялась
-     */
-    private Trade executeTrade(OrderBook orderBook, Order incomingOrder, Order contraOrder) {
-        // Определяем цену исполнения
+    private Trade calculateTrade(Order incomingOrder, Order contraOrder) {
         BigDecimal tradePrice = determineTradePrice(incomingOrder, contraOrder);
-        
-        // Определяем объём сделки (минимум из оставшихся количеств обоих ордеров)
-        BigDecimal incomingRemaining = incomingOrder.getRemainingQuantity();
-        BigDecimal contraRemaining = contraOrder.getRemainingQuantity();
-        BigDecimal tradeQuantity = incomingRemaining.min(contraRemaining);
+        BigDecimal tradeQuantity = incomingOrder.getRemainingQuantity().min(contraOrder.getRemainingQuantity());
         
         if (tradeQuantity.compareTo(BigDecimal.ZERO) <= 0) {
             return null;
         }
         
-        // Создаём сделку
         Order buyOrder = incomingOrder.getSide() == Side.BUY ? incomingOrder : contraOrder;
         Order sellOrder = incomingOrder.getSide() == Side.SELL ? incomingOrder : contraOrder;
         
         Trade trade = new Trade(buyOrder, sellOrder, tradePrice, tradeQuantity);
         
-        // Обновляем статусы ордеров
+        // Обновляем количество (пока в памяти объекта Order)
         incomingOrder.addFilledQuantity(tradeQuantity);
         contraOrder.addFilledQuantity(tradeQuantity);
-        
-        // Если контрактный ордер полностью исполнен — удаляем из стакана
-        if (!contraOrder.isActive()) {
-            orderBook.removeOrder(contraOrder);
-        }
         
         return trade;
     }
 
-    /**
-     * Определяет цену исполнения сделки.
-     * - Для LIMIT ордеров: цена контрактного ордера (цена в стакане)
-     * - Для MARKET ордеров: лучшая доступная цена в стакане
-     */
     private BigDecimal determineTradePrice(Order order, Order contraOrder) {
-        // Если входящий ордер MARKET — берём цену контрактного ордера
-        if (order.getType() == OrderType.MARKET) {
-            return contraOrder.getPrice();
-        }
-        
-        // Если контрактный ордер MARKET (маловероятно, но возможно) — берём цену входящего
-        if (contraOrder.getType() == OrderType.MARKET) {
-            return order.getPrice();
-        }
-        
-        // Оба LIMIT: берём цену того ордера, который был в стакане раньше
-        // В упрощённой версии берём цену контрактного ордера (maker price)
-        return contraOrder.getPrice();
-    }
-
-    /**
-     * Отменяет ордер в стакане (если он там есть).
-     * Возвращает true, если ордер был найден и удалён.
-     */
-    public boolean cancelOrder(OrderBook orderBook, Order order) {
-        if (!order.isActive()) {
-            return false;
-        }
-        
-        orderBook.removeOrder(order);
-        return true;
+        if (order.getType() == OrderType.MARKET) return contraOrder.getPrice();
+        if (contraOrder.getType() == OrderType.MARKET) return order.getPrice();
+        return contraOrder.getPrice(); // Maker price
     }
 }
