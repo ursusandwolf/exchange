@@ -24,14 +24,13 @@
 - [x] **Reliability**: Синхронизация стакана с транзакциями БД (`afterCommit`).
 - [x] **Docs**: Обновление архитектурной документации.
 
-## 🚀 Будущее (Phase 4: Optimization & UX)
-- [ ] **WebSockets**: Real-time трансляция стакана (OrderBook Updates).
-- [ ] **Market Data Service**: Агрегация свечей (OHLCV) для графиков.
-- [ ] **Java 21**: Переход на Virtual Threads для масштабируемости.
-- [ ] **Fees**: Реализация системы комиссий (Maker/Taker).
+## ✅ Завершено (Phase 4: Optimization & UX)
+- [x] **WebSockets**: Real-time трансляция стакана (OrderBook Updates).
+- [x] **Market Data Service**: Агрегация свечей (OHLCV) для графиков.
+- [x] **Java 21**: Переход на Virtual Threads для масштабируемости.
+- [x] **Fees**: Реализация системы комиссий (Maker/Taker).
 
-## 🚀 Будущее (Phase 4: Optimization & UX)
-- [ ] **WebSockets**: Real-time трансляция стакана (OrderBook Updates).
-- [ ] **Market Data Service**: Агрегация свечей (OHLCV) для графиков.
-- [ ] **Java 21**: Переход на Virtual Threads для масштабируемости.
-- [ ] **Fees**: Реализация системы комиссий (Maker/Taker).
+## 🚀 Будущее (Phase 5: External Integrations)
+- [x] **Price Oracle**: Получение реальных цен с Binance API (`ExternalPriceOracleService`).
+- [ ] **TradingView**: Интеграция легковесного чарта для отображения свечей.
+- [ ] **Arbitrage Bots**: Демонстрационные боты, торгующие на основе разницы цен Oracle и внутренней биржи.

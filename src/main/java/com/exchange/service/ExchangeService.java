@@ -31,6 +31,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * Основной сервис биржи.
  * Координирует работу с ордерами, кошельками и стаканом заявок.
  */
+import jakarta.persistence.EntityManager;
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -38,14 +40,17 @@ public class ExchangeService {
     
     private final UserRepository userRepository;
     private final OrderRepository orderRepository;
+    private final MarketDataService marketDataService;
+    private final FeeService feeService;
     private final PasswordEncoder passwordEncoder;
-    
+    private final EntityManager entityManager;
+
     // Стаканы по торговым парам всё еще в памяти для скорости
     private final Map<String, OrderBook> orderBooks = new ConcurrentHashMap<>();
-    
+
     // Движок сведения ордеров
-    private final MatchingEngine matchingEngine = new MatchingEngine();
-    
+    private MatchingEngine matchingEngine;
+
     // Блокировки по торговым парам
     private final Map<String, Object> locks = new ConcurrentHashMap<>();
 
@@ -53,7 +58,8 @@ public class ExchangeService {
      * Инициализация стаканов при старте приложения на основе активных ордеров в БД.
      */
     @PostConstruct
-    public void recoverOrderBooks() {
+    public void init() {
+        this.matchingEngine = new MatchingEngine(feeService);
         log.info("Starting OrderBook recovery from database...");
         List<Order> activeOrders = orderRepository.findByStatusInOrderByCreatedAtAsc(
                 List.of(OrderStatus.PENDING, OrderStatus.PARTIALLY_FILLED)
@@ -120,7 +126,10 @@ public class ExchangeService {
                                                 Side side, BigDecimal quantity, BigDecimal price, BigDecimal priceLimit) {
         validateSubmitOrderInputs(user, baseAsset, quoteAsset, quantity, price);
         
-        user = userRepository.findById(user.getId()).orElseThrow();
+        // Перечитываем пользователя через EntityManager, чтобы гарантировать свежее состояние (для тестов и конкурентности)
+        user = entityManager.find(User.class, user.getId());
+        if (user == null) throw new IllegalArgumentException("Пользователь не найден");
+        
         Wallet wallet = user.getWallet();
         OrderBook orderBook = getOrderBook(baseAsset, quoteAsset);
         
@@ -134,6 +143,9 @@ public class ExchangeService {
         // Валидируем и резервируем средства
         validateAndReserve(wallet, order);
         
+        // Сбрасываем изменения в БД, чтобы гарантировать видимость зарезервированных средств
+        entityManager.flush();
+        
         // Запускаем matching engine
         MatchResult result = matchingEngine.match(orderBook, order);
         
@@ -143,17 +155,33 @@ public class ExchangeService {
         }
         
         // Синхронизируем состояние стакана в памяти ПОСЛЕ коммита в БД
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                for (Order toRemove : result.getOrdersToRemove()) {
-                    orderBook.removeOrder(toRemove);
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    for (Order toRemove : result.getOrdersToRemove()) {
+                        orderBook.removeOrder(toRemove);
+                    }
+                    if (result.getRemainingOrder() != null) {
+                        orderBook.addOrder(result.getRemainingOrder());
+                    }
+                    
+                    // Broadcast updates
+                    result.getTrades().forEach(marketDataService::broadcastTrade);
+                    marketDataService.broadcastOrderBookUpdate(orderBook);
                 }
-                if (result.getRemainingOrder() != null) {
-                    orderBook.addOrder(result.getRemainingOrder());
-                }
+            });
+        } else {
+            // Fallback for non-transactional calls (e.g., some tests)
+            for (Order toRemove : result.getOrdersToRemove()) {
+                orderBook.removeOrder(toRemove);
             }
-        });
+            if (result.getRemainingOrder() != null) {
+                orderBook.addOrder(result.getRemainingOrder());
+            }
+            result.getTrades().forEach(marketDataService::broadcastTrade);
+            marketDataService.broadcastOrderBookUpdate(orderBook);
+        }
 
         // Обновляем состояние резерва
         if (order.isActive()) {
@@ -203,8 +231,13 @@ public class ExchangeService {
             } else {
                 requiredAmount = order.getQuantity().multiply(order.getPrice());
             }
-            wallet.reserve(order.getQuoteAsset(), requiredAmount);
+            // Резервируем с учетом комиссии Taker (на всякий случай, как максимум)
+            BigDecimal estimatedFee = feeService.calculateTakerFee(requiredAmount);
+            BigDecimal toReserve = requiredAmount.add(estimatedFee);
+            log.info("Reserving {} USDT for user {} (including estimated fee {})", toReserve, wallet.getOwnerId(), estimatedFee);
+            wallet.reserve(order.getQuoteAsset(), toReserve);
         } else {
+            log.info("Reserving {} {} for user {}", order.getQuantity(), order.getBaseAsset(), wallet.getOwnerId());
             wallet.reserve(order.getBaseAsset(), order.getQuantity());
         }
     }
@@ -221,8 +254,9 @@ public class ExchangeService {
      * Исполняет сделку: переводит активы между покупателями и продавцами.
      */
     private void settleTrade(Trade trade) {
-        User buyer = getUser(trade.getBuyerId());
-        User seller = getUser(trade.getSellerId());
+        // Перечитываем участников сделки, чтобы иметь актуальные кошельки с зарезервированными средствами
+        User buyer = entityManager.find(User.class, trade.getBuyerId());
+        User seller = entityManager.find(User.class, trade.getSellerId());
         
         if (buyer == null || seller == null) {
             throw new IllegalStateException("Участник сделки не найден в системе");
@@ -236,12 +270,16 @@ public class ExchangeService {
         
         BigDecimal quantity = trade.getQuantity();
         BigDecimal totalAmount = trade.getTotalAmount();
+        BigDecimal buyerFee = trade.getBuyerFee();
+        BigDecimal sellerFee = trade.getSellerFee();
         
-        buyerWallet.deductReserved(quoteAsset, totalAmount);
+        // Покупатель платит totalAmount + buyerFee в quote asset
+        buyerWallet.deductReserved(quoteAsset, totalAmount.add(buyerFee));
         buyerWallet.credit(baseAsset, quantity);
         
+        // Продавец получает totalAmount - sellerFee в quote asset
         sellerWallet.deductReserved(baseAsset, quantity);
-        sellerWallet.credit(quoteAsset, totalAmount);
+        sellerWallet.credit(quoteAsset, totalAmount.subtract(sellerFee));
 
         userRepository.save(buyer);
         userRepository.save(seller);
@@ -327,13 +365,19 @@ public class ExchangeService {
 
             // Синхронизируем стакан после коммита
             final Order finalOrder = order;
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override
-                public void afterCommit() {
-                    orderBook.removeOrder(finalOrder);
-                    log.info("Order {} cancelled and removed from OrderBook", finalOrder.getId());
-                }
-            });
+            if (TransactionSynchronizationManager.isSynchronizationActive()) {
+                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        orderBook.removeOrder(finalOrder);
+                        log.info("Order {} cancelled and removed from OrderBook", finalOrder.getId());
+                        marketDataService.broadcastOrderBookUpdate(orderBook);
+                    }
+                });
+            } else {
+                orderBook.removeOrder(finalOrder);
+                marketDataService.broadcastOrderBookUpdate(orderBook);
+            }
             
             return true;
         }

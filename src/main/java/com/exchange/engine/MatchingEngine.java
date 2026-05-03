@@ -14,7 +14,14 @@ import java.util.List;
  * Отвечает за расчет сделок. Не изменяет OrderBook напрямую, 
  * а возвращает MatchResult с инструкциями по обновлению.
  */
+import com.exchange.service.FeeService;
+
 public class MatchingEngine {
+    private final FeeService feeService;
+
+    public MatchingEngine(FeeService feeService) {
+        this.feeService = feeService;
+    }
     
     /**
      * Вычисляет сделки для входящего ордера.
@@ -81,7 +88,16 @@ public class MatchingEngine {
         Order buyOrder = incomingOrder.getSide() == Side.BUY ? incomingOrder : contraOrder;
         Order sellOrder = incomingOrder.getSide() == Side.SELL ? incomingOrder : contraOrder;
         
-        Trade trade = new Trade(buyOrder, sellOrder, tradePrice, tradeQuantity);
+        BigDecimal totalAmount = tradePrice.multiply(tradeQuantity);
+        BigDecimal buyerFee = (incomingOrder.getSide() == Side.BUY) 
+                ? feeService.calculateTakerFee(totalAmount) 
+                : feeService.calculateMakerFee(totalAmount);
+        BigDecimal sellerFee = (incomingOrder.getSide() == Side.SELL) 
+                ? feeService.calculateTakerFee(totalAmount) 
+                : feeService.calculateMakerFee(totalAmount);
+
+        Trade trade = new Trade(buyOrder, sellOrder, tradePrice, tradeQuantity, 
+                                buyerFee, sellerFee, incomingOrder.getId(), contraOrder.getId());
         
         // Обновляем количество (пока в памяти объекта Order)
         incomingOrder.addFilledQuantity(tradeQuantity);

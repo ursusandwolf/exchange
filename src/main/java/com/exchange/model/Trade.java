@@ -26,8 +26,11 @@ public class Trade {
     // Комиссии (пока не используются,预留 для будущего расширения)
     private final BigDecimal buyerFee;
     private final BigDecimal sellerFee;
+    private final String takerOrderId;
+    private final String makerOrderId;
 
-    public Trade(Order buyOrder, Order sellOrder, BigDecimal price, BigDecimal quantity) {
+    public Trade(Order buyOrder, Order sellOrder, BigDecimal price, BigDecimal quantity, 
+                 BigDecimal buyerFee, BigDecimal sellerFee, String takerOrderId, String makerOrderId) {
         this.id = UUID.randomUUID().toString();
         this.symbol = buyOrder.getSymbol();
         this.buyOrder = buyOrder;
@@ -36,9 +39,10 @@ public class Trade {
         this.quantity = quantity;
         this.totalAmount = price.multiply(quantity);
         this.timestamp = Instant.now();
-        // TODO: Здесь можно добавить расчёт комиссий на основе maker/taker ставок
-        this.buyerFee = BigDecimal.ZERO;
-        this.sellerFee = BigDecimal.ZERO;
+        this.buyerFee = buyerFee;
+        this.sellerFee = sellerFee;
+        this.takerOrderId = takerOrderId;
+        this.makerOrderId = makerOrderId;
     }
 
     /**
