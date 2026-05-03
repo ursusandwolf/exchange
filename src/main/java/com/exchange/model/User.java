@@ -31,6 +31,9 @@ public class User {
     @JoinColumn(name = "wallet_id", referencedColumnName = "ownerId")
     private Wallet wallet;
 
+    @Version
+    private Long version;
+
     public User(String username, String password) {
         this.id = UUID.randomUUID().toString();
         this.username = username;

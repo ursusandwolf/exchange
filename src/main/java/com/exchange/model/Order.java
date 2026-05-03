@@ -47,6 +47,9 @@ public class Order {
     @Column(precision = 24, scale = 8)
     private BigDecimal price;      // Цена за единицу (null для MARKET ордеров)
     
+    @Column(precision = 24, scale = 8)
+    private BigDecimal priceLimit; // Лимит проскальзывания для MARKET ордеров
+    
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private OrderStatus status;
@@ -60,8 +63,11 @@ public class Order {
     @Column(nullable = false)
     private Instant updatedAt;
 
+    @Version
+    private Long version;
+
     private Order(String userId, String baseAsset, String quoteAsset, Side side, 
-                  OrderType type, BigDecimal quantity, BigDecimal price) {
+                  OrderType type, BigDecimal quantity, BigDecimal price, BigDecimal priceLimit) {
         this.id = UUID.randomUUID().toString();
         this.userId = userId;
         this.baseAsset = baseAsset;
@@ -70,6 +76,7 @@ public class Order {
         this.type = type;
         this.quantity = quantity;
         this.price = price;
+        this.priceLimit = priceLimit;
         this.status = OrderStatus.PENDING;
         this.filledQuantity = BigDecimal.ZERO;
         this.createdAt = Instant.now();
@@ -84,15 +91,15 @@ public class Order {
         if (price == null || price.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Цена должна быть положительной для LIMIT ордера");
         }
-        return new Order(userId, baseAsset, quoteAsset, side, OrderType.LIMIT, quantity, price);
+        return new Order(userId, baseAsset, quoteAsset, side, OrderType.LIMIT, quantity, price, null);
     }
 
     /**
      * Фабричный метод для создания MARKET ордера.
      */
     public static Order marketOrder(String userId, String baseAsset, String quoteAsset, 
-                                    Side side, BigDecimal quantity) {
-        return new Order(userId, baseAsset, quoteAsset, side, OrderType.MARKET, quantity, null);
+                                    Side side, BigDecimal quantity, BigDecimal priceLimit) {
+        return new Order(userId, baseAsset, quoteAsset, side, OrderType.MARKET, quantity, null, priceLimit);
     }
 
     /**
@@ -131,5 +138,17 @@ public class Order {
      */
     public boolean isActive() {
         return this.status == OrderStatus.PENDING || this.status == OrderStatus.PARTIALLY_FILLED;
+    }
+
+    /**
+     * Отменяет ордер.
+     * @throws IllegalStateException если ордер не активен
+     */
+    public synchronized void cancel() {
+        if (!isActive()) {
+            throw new IllegalStateException("Нельзя отменить неактивный ордер в статусе " + status);
+        }
+        this.status = OrderStatus.CANCELLED;
+        this.updatedAt = Instant.now();
     }
 }

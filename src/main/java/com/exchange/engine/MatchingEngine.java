@@ -61,6 +61,17 @@ public class MatchingEngine {
 
     private Trade calculateTrade(Order incomingOrder, Order contraOrder) {
         BigDecimal tradePrice = determineTradePrice(incomingOrder, contraOrder);
+        
+        // Slippage Protection check
+        if (incomingOrder.getType() == OrderType.MARKET && incomingOrder.getPriceLimit() != null) {
+            if (incomingOrder.getSide() == Side.BUY && tradePrice.compareTo(incomingOrder.getPriceLimit()) > 0) {
+                return null; // Price too high for buyer
+            }
+            if (incomingOrder.getSide() == Side.SELL && tradePrice.compareTo(incomingOrder.getPriceLimit()) < 0) {
+                return null; // Price too low for seller
+            }
+        }
+
         BigDecimal tradeQuantity = incomingOrder.getRemainingQuantity().min(contraOrder.getRemainingQuantity());
         
         if (tradeQuantity.compareTo(BigDecimal.ZERO) <= 0) {

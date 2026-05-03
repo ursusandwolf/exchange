@@ -45,6 +45,9 @@ public class ExchangeService {
     
     // Движок сведения ордеров
     private final MatchingEngine matchingEngine = new MatchingEngine();
+    
+    // Блокировки по торговым парам
+    private final Map<String, Object> locks = new ConcurrentHashMap<>();
 
     /**
      * Инициализация стаканов при старте приложения на основе активных ордеров в БД.
@@ -100,10 +103,21 @@ public class ExchangeService {
 
     /**
      * Принимает ордер от пользователя.
+     * Использует блокировку по паре для обеспечения атомарности матчинга.
      */
-    @Transactional
     public List<Trade> submitOrder(User user, String baseAsset, String quoteAsset, 
-                                   Side side, BigDecimal quantity, BigDecimal price) {
+                                   Side side, BigDecimal quantity, BigDecimal price, BigDecimal priceLimit) {
+        String symbol = baseAsset + "/" + quoteAsset;
+        Object lock = locks.computeIfAbsent(symbol, k -> new Object());
+        
+        synchronized (lock) {
+            return executeOrderTransaction(user, baseAsset, quoteAsset, side, quantity, price, priceLimit);
+        }
+    }
+
+    @Transactional
+    protected List<Trade> executeOrderTransaction(User user, String baseAsset, String quoteAsset, 
+                                                Side side, BigDecimal quantity, BigDecimal price, BigDecimal priceLimit) {
         validateSubmitOrderInputs(user, baseAsset, quoteAsset, quantity, price);
         
         user = userRepository.findById(user.getId()).orElseThrow();
@@ -113,7 +127,7 @@ public class ExchangeService {
         // Создаём ордер
         Order order = (price != null) 
             ? Order.limitOrder(user.getId(), baseAsset, quoteAsset, side, quantity, price)
-            : Order.marketOrder(user.getId(), baseAsset, quoteAsset, side, quantity);
+            : Order.marketOrder(user.getId(), baseAsset, quoteAsset, side, quantity, priceLimit);
         
         orderRepository.save(order);
         
@@ -276,8 +290,92 @@ public class ExchangeService {
     /**
      * Отменяет активный ордер.
      */
-    public boolean cancelOrder(String orderId) {
-        throw new UnsupportedOperationException("Отмена ордера требует глобального реестра ордеров");
+    @Transactional
+    public boolean cancelOrder(String userId, String orderId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new IllegalArgumentException("Ордер не найден: " + orderId));
+        
+        if (!order.getUserId().equals(userId)) {
+            throw new IllegalArgumentException("Вы не можете отменить чужой ордер");
+        }
+
+        if (!order.isActive()) {
+            return false;
+        }
+
+        String symbol = order.getSymbol();
+        Object lock = locks.computeIfAbsent(symbol, k -> new Object());
+
+        synchronized (lock) {
+            // Перепроверяем статус после захвата лока
+            order = orderRepository.findById(orderId).orElseThrow();
+            if (!order.isActive()) {
+                return false;
+            }
+
+            OrderBook orderBook = getOrderBook(order.getBaseAsset(), order.getQuoteAsset());
+            
+            // Помечаем как отмененный
+            order.cancel();
+            
+            // Возвращаем зарезервированные средства
+            User user = userRepository.findById(userId).orElseThrow();
+            releaseOrderReserve(user.getWallet(), order);
+            
+            orderRepository.save(order);
+            userRepository.save(user);
+
+            // Синхронизируем стакан после коммита
+            final Order finalOrder = order;
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    orderBook.removeOrder(finalOrder);
+                    log.info("Order {} cancelled and removed from OrderBook", finalOrder.getId());
+                }
+            });
+            
+            return true;
+        }
+    }
+
+    private void releaseOrderReserve(Wallet wallet, Order order) {
+        BigDecimal toRelease;
+        String asset;
+        
+        if (order.getSide() == Side.BUY) {
+            asset = order.getQuoteAsset();
+            if (order.getType() == OrderType.LIMIT) {
+                toRelease = order.getRemainingQuantity().multiply(order.getPrice());
+            } else {
+                // Для MARKET ордера мы резервировали по Best Ask, 
+                // но MARKET ордера обычно исполняются мгновенно и не висят в стакане.
+                // Если он все же попал сюда, освобождаем весь остаток резерва.
+                toRelease = wallet.getReserved(asset); 
+            }
+        } else {
+            asset = order.getBaseAsset();
+            toRelease = order.getRemainingQuantity();
+        }
+        
+        if (toRelease.compareTo(BigDecimal.ZERO) > 0) {
+            wallet.unreserve(asset, toRelease);
+        }
+    }
+
+    /**
+     * Возвращает список ордеров пользователя.
+     */
+    public List<Order> getUserOrders(String userId) {
+        return orderRepository.findByUserIdOrderByCreatedAtDesc(userId);
+    }
+
+    /**
+     * Возвращает портфель пользователя (балансы).
+     */
+    public Wallet getUserWallet(String userId) {
+        User user = userRepository.findById(userId).orElseThrow(() -> new IllegalArgumentException("User not found"));
+        return user.getWallet();
     }
 
     /**

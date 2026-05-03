@@ -37,6 +37,9 @@ public class Wallet {
     @Column(name = "amount")
     private Map<String, BigDecimal> reserved = new ConcurrentHashMap<>();
 
+    @Version
+    private Long version;
+
     public Wallet(String ownerId) {
         this.ownerId = ownerId;
     }

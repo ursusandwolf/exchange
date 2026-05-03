@@ -20,6 +20,7 @@ public class OrderBook {
     private final String symbol;
     private final NavigableMap<BigDecimal, OrderQueue> bids;
     private final NavigableMap<BigDecimal, OrderQueue> asks;
+    private final Map<String, Order> orderIndex = new java.util.concurrent.ConcurrentHashMap<>();
 
     public OrderBook(String baseAsset, String quoteAsset) {
         this.symbol = baseAsset + "/" + quoteAsset;
@@ -33,6 +34,7 @@ public class OrderBook {
         }
         NavigableMap<BigDecimal, OrderQueue> targetMap = order.getSide() == Side.BUY ? bids : asks;
         targetMap.computeIfAbsent(order.getPrice(), k -> new OrderQueue()).addOrder(order);
+        orderIndex.put(order.getId(), order);
     }
 
     public Order getBestBidOrderExcluding(Collection<Order> excluded) {
@@ -58,6 +60,11 @@ public class OrderBook {
             queue.removeOrder(order);
             if (queue.isEmpty()) targetMap.remove(order.getPrice());
         }
+        orderIndex.remove(order.getId());
+    }
+
+    public Order getOrder(String orderId) {
+        return orderIndex.get(orderId);
     }
 
     public boolean hasMatchingOrders(Order order) {

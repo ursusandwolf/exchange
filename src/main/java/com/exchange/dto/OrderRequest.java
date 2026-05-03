@@ -21,5 +21,8 @@ public record OrderRequest(
     BigDecimal quantity,
 
     @Positive(message = "Price must be positive")
-    BigDecimal price
+    BigDecimal price,
+
+    @Positive(message = "Price limit must be positive")
+    BigDecimal priceLimit
 ) {}

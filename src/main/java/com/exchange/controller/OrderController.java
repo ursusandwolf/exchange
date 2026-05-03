@@ -36,7 +36,8 @@ public class OrderController {
             request.quoteAsset(), 
             request.side(), 
             request.quantity(), 
-            request.price()
+            request.price(),
+            request.priceLimit()
         );
 
         return trades.stream()
@@ -48,6 +49,38 @@ public class OrderController {
                 t.getQuantity(),
                 t.getTotalAmount(),
                 LocalDateTime.ofInstant(t.getTimestamp(), ZoneId.systemDefault())
+            ))
+            .toList();
+    }
+
+    @PostMapping("/{orderId}/cancel")
+    public String cancelOrder(@PathVariable String orderId) {
+        UserDetails userDetails = (UserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        User user = userRepository.findByUsername(userDetails.getUsername())
+                .orElseThrow(() -> new IllegalArgumentException("Authenticated user not found"));
+        
+        boolean cancelled = exchangeService.cancelOrder(user.getId(), orderId);
+        return cancelled ? "Order cancelled successfully" : "Order could not be cancelled (already filled or not found)";
+    }
+
+    @GetMapping("/history")
+    public List<com.exchange.dto.OrderResponse> getOrderHistory() {
+        UserDetails userDetails = (UserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        User user = userRepository.findByUsername(userDetails.getUsername())
+                .orElseThrow(() -> new IllegalArgumentException("Authenticated user not found"));
+        
+        return exchangeService.getUserOrders(user.getId()).stream()
+            .map(o -> new com.exchange.dto.OrderResponse(
+                o.getId(),
+                o.getBaseAsset(),
+                o.getQuoteAsset(),
+                o.getSide(),
+                o.getType(),
+                o.getQuantity(),
+                o.getPrice(),
+                o.getFilledQuantity(),
+                o.getStatus(),
+                o.getCreatedAt()
             ))
             .toList();
     }
