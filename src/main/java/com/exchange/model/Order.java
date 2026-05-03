@@ -3,6 +3,10 @@ package com.exchange.model;
 import com.exchange.enums.OrderStatus;
 import com.exchange.enums.OrderType;
 import com.exchange.enums.Side;
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -11,19 +15,49 @@ import java.util.UUID;
 /**
  * Заявка (ордер) на покупку или продажу актива.
  */
+@Entity
+@Table(name = "orders")
+@Getter
+@ToString(exclude = {"updatedAt"})
+@NoArgsConstructor
 public class Order {
-    private final String id;
-    private final String userId;
-    private final String baseAsset;      // Например, BTC
-    private final String quoteAsset;     // Например, USDT
-    private final Side side;             // BUY или SELL
-    private final OrderType type;        // LIMIT или MARKET
-    private final BigDecimal quantity;   // Количество базового актива
-    private final BigDecimal price;      // Цена за единицу (null для MARKET ордеров)
+    @Id
+    private String id;
     
+    @Column(nullable = false)
+    private String userId;
+    
+    @Column(nullable = false)
+    private String baseAsset;      // Например, BTC
+    
+    @Column(nullable = false)
+    private String quoteAsset;     // Например, USDT
+    
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private Side side;             // BUY или SELL
+    
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private OrderType type;        // LIMIT или MARKET
+    
+    @Column(precision = 24, scale = 8, nullable = false)
+    private BigDecimal quantity;   // Количество базового актива
+    
+    @Column(precision = 24, scale = 8)
+    private BigDecimal price;      // Цена за единицу (null для MARKET ордеров)
+    
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
     private OrderStatus status;
+    
+    @Column(precision = 24, scale = 8, nullable = false)
     private BigDecimal filledQuantity;   // Сколько уже исполнено
+    
+    @Column(nullable = false)
     private Instant createdAt;
+    
+    @Column(nullable = false)
     private Instant updatedAt;
 
     private Order(String userId, String baseAsset, String quoteAsset, Side side, 
@@ -97,40 +131,5 @@ public class Order {
      */
     public boolean isActive() {
         return this.status == OrderStatus.PENDING || this.status == OrderStatus.PARTIALLY_FILLED;
-    }
-
-    // Геттеры
-    public String getId() { return id; }
-    public String getUserId() { return userId; }
-    public String getBaseAsset() { return baseAsset; }
-    public String getQuoteAsset() { return quoteAsset; }
-    public Side getSide() { return side; }
-    public OrderType getType() { return type; }
-    public BigDecimal getQuantity() { return quantity; }
-    public BigDecimal getPrice() { return price; }
-    public OrderStatus getStatus() { return status; }
-    public BigDecimal getFilledQuantity() { return filledQuantity; }
-    public Instant getCreatedAt() { return createdAt; }
-    public Instant getUpdatedAt() { return updatedAt; }
-
-    // TODO: Здесь можно добавить:
-    // - TimeInForce (GTC, IOC, FOK) для управления временем жизни ордера
-    // - Комиссии maker/taker
-    // - Stop-loss и take-profit уровни
-    // - Историю изменений статуса (аудит)
-    // - Методы для persistency (сериализация в БД)
-
-    @Override
-    public String toString() {
-        return "Order{" +
-                "id='" + id + '\'' +
-                ", symbol='" + getSymbol() + '\'' +
-                ", side=" + side +
-                ", type=" + type +
-                ", quantity=" + quantity +
-                ", price=" + price +
-                ", status=" + status +
-                ", filled=" + filledQuantity +
-                '}';
     }
 }

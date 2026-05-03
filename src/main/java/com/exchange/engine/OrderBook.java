@@ -1,13 +1,14 @@
 package com.exchange.engine;
 
+import com.exchange.enums.OrderType;
 import com.exchange.enums.Side;
 import com.exchange.model.Order;
+import lombok.Getter;
 
 import java.math.BigDecimal;
-import java.util.Iterator;
+import java.util.Comparator;
 import java.util.Map;
 import java.util.NavigableMap;
-import java.util.TreeMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 
 /**
@@ -17,6 +18,7 @@ import java.util.concurrent.ConcurrentSkipListMap;
  * - Bids (покупки): сортируются по убыванию цены (лучшая цена — самая высокая)
  * - Asks (продажи): сортируются по возрастанию цены (лучшая цена — самая низкая)
  */
+@Getter
 public class OrderBook {
     private final String symbol;  // Торговая пара, например "BTC/USDT"
     
@@ -29,13 +31,9 @@ public class OrderBook {
     public OrderBook(String baseAsset, String quoteAsset) {
         this.symbol = baseAsset + "/" + quoteAsset;
         // Reverse order для bids (убывание цен)
-        this.bids = new ConcurrentSkipListMap<>(java.util.Collections.reverseOrder());
+        this.bids = new ConcurrentSkipListMap<>(Comparator.reverseOrder());
         // Natural order для asks (возрастание цен)
         this.asks = new ConcurrentSkipListMap<>();
-    }
-
-    public String getSymbol() {
-        return symbol;
     }
 
     /**
@@ -105,19 +103,16 @@ public class OrderBook {
 
     /**
      * Проверяет, есть ли ордера, которые могут быть исполнены против данного ордера.
-     * Для BUY ордера: существует ли ask с ценой <= цены BUY ордера
-     * Для SELL ордера: существует ли bid с ценой >= цены SELL ордера
-     * Для MARKET ордеров: существует ли любой противоположный ордер
      */
     public boolean hasMatchingOrders(Order order) {
         if (order.getSide() == Side.BUY) {
-            if (order.getType().toString().equals("MARKET") || order.getPrice() == null) {
+            if (order.getType() == OrderType.MARKET || order.getPrice() == null) {
                 return !asks.isEmpty();
             }
             BigDecimal bestAsk = getBestAsk();
             return bestAsk != null && bestAsk.compareTo(order.getPrice()) <= 0;
         } else { // SELL
-            if (order.getType().toString().equals("MARKET") || order.getPrice() == null) {
+            if (order.getType() == OrderType.MARKET || order.getPrice() == null) {
                 return !bids.isEmpty();
             }
             BigDecimal bestBid = getBestBid();
@@ -138,12 +133,6 @@ public class OrderBook {
     public int getAskCount() {
         return asks.values().stream().mapToInt(OrderQueue::size).sum();
     }
-
-    // TODO: Здесь можно добавить:
-    // - Глубину стакана (level 2, level 3 данные)
-    // - Снэпшоты состояния для восстановления
-    // - Статистику объёмов по ценам
-    // - Блокировку на время matching для thread-safety в высоконагруженных системах
 
     @Override
     public String toString() {

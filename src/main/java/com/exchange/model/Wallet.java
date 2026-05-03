@@ -1,8 +1,12 @@
 package com.exchange.model;
 
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.ToString;
+
 import java.math.BigDecimal;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -11,23 +15,30 @@ import java.util.concurrent.ConcurrentHashMap;
  * Кошелёк пользователя.
  * Хранит балансы по нескольким активам, поддерживает резервирование средств под ордеры.
  */
+@Entity
+@Getter
+@ToString
+@NoArgsConstructor
 public class Wallet {
-    private final String ownerId;
+    @Id
+    private String ownerId;
     
     // Доступный баланс по каждому активу
-    private final Map<String, BigDecimal> balances;
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "wallet_balances", joinColumns = @JoinColumn(name = "wallet_id"))
+    @MapKeyColumn(name = "asset_symbol")
+    @Column(name = "balance")
+    private Map<String, BigDecimal> balances = new ConcurrentHashMap<>();
     
     // Зарезервированные средства под открытые ордера
-    private final Map<String, BigDecimal> reserved;
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "wallet_reserved", joinColumns = @JoinColumn(name = "wallet_id"))
+    @MapKeyColumn(name = "asset_symbol")
+    @Column(name = "amount")
+    private Map<String, BigDecimal> reserved = new ConcurrentHashMap<>();
 
     public Wallet(String ownerId) {
         this.ownerId = ownerId;
-        this.balances = new ConcurrentHashMap<>();
-        this.reserved = new ConcurrentHashMap<>();
-    }
-
-    public String getOwnerId() {
-        return ownerId;
     }
 
     /**
@@ -137,14 +148,5 @@ public class Wallet {
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Сумма должна быть положительной");
         }
-    }
-
-    @Override
-    public String toString() {
-        return "Wallet{" +
-                "ownerId='" + ownerId + '\'' +
-                ", balances=" + balances +
-                ", reserved=" + reserved +
-                '}';
     }
 }

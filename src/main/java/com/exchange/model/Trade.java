@@ -1,5 +1,8 @@
 package com.exchange.model;
 
+import lombok.Getter;
+import lombok.ToString;
+
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
@@ -8,6 +11,8 @@ import java.util.UUID;
  * Результат исполнения сделки между двумя ордерами.
  * DTO для передачи информации о совершённой сделке.
  */
+@Getter
+@ToString(exclude = {"buyOrder", "sellOrder"})
 public class Trade {
     private final String id;
     private final String symbol;           // Торговая пара, например BTC/USDT
@@ -36,18 +41,6 @@ public class Trade {
         this.sellerFee = BigDecimal.ZERO;
     }
 
-    // Геттеры
-    public String getId() { return id; }
-    public String getSymbol() { return symbol; }
-    public Order getBuyOrder() { return buyOrder; }
-    public Order getSellOrder() { return sellOrder; }
-    public BigDecimal getPrice() { return price; }
-    public BigDecimal getQuantity() { return quantity; }
-    public BigDecimal getTotalAmount() { return totalAmount; }
-    public Instant getTimestamp() { return timestamp; }
-    public BigDecimal getBuyerFee() { return buyerFee; }
-    public BigDecimal getSellerFee() { return sellerFee; }
-
     /**
      * Возвращает ID покупателя.
      */
@@ -60,18 +53,5 @@ public class Trade {
      */
     public String getSellerId() {
         return sellOrder.getUserId();
-    }
-
-    @Override
-    public String toString() {
-        return "Trade{" +
-                "id='" + id + '\'' +
-                ", symbol='" + symbol + '\'' +
-                ", price=" + price +
-                ", quantity=" + quantity +
-                ", total=" + totalAmount +
-                ", buyer=" + getBuyerId() +
-                ", seller=" + getSellerId() +
-                '}';
     }
 }

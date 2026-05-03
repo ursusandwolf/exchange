@@ -1,5 +1,6 @@
 package com.exchange.engine;
 
+import com.exchange.enums.OrderType;
 import com.exchange.enums.Side;
 import com.exchange.model.Order;
 import com.exchange.model.Trade;
@@ -7,7 +8,6 @@ import com.exchange.model.Trade;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Matching Engine — движок сведения ордеров.
@@ -23,10 +23,6 @@ public class MatchingEngine {
     
     /**
      * Обрабатывает новый ордер и возвращает список совершённых сделок.
-     * 
-     * @param orderBook Стакан для торговой пары
-     * @param incomingOrder Входящий ордер
-     * @return Список совершённых сделок
      */
     public synchronized List<Trade> match(OrderBook orderBook, Order incomingOrder) {
         List<Trade> trades = new ArrayList<>();
@@ -82,7 +78,6 @@ public class MatchingEngine {
         }
         
         // Создаём сделку
-        // Важно: buyOrder всегда ордер на покупку, sellOrder — на продажу
         Order buyOrder = incomingOrder.getSide() == Side.BUY ? incomingOrder : contraOrder;
         Order sellOrder = incomingOrder.getSide() == Side.SELL ? incomingOrder : contraOrder;
         
@@ -107,12 +102,12 @@ public class MatchingEngine {
      */
     private BigDecimal determineTradePrice(Order order, Order contraOrder) {
         // Если входящий ордер MARKET — берём цену контрактного ордера
-        if (order.getType().toString().equals("MARKET")) {
+        if (order.getType() == OrderType.MARKET) {
             return contraOrder.getPrice();
         }
         
         // Если контрактный ордер MARKET (маловероятно, но возможно) — берём цену входящего
-        if (contraOrder.getType().toString().equals("MARKET")) {
+        if (contraOrder.getType() == OrderType.MARKET) {
             return order.getPrice();
         }
         
@@ -120,14 +115,6 @@ public class MatchingEngine {
         // В упрощённой версии берём цену контрактного ордера (maker price)
         return contraOrder.getPrice();
     }
-
-    // TODO: Здесь можно добавить:
-    // - Поддержку разных алгоритмов pricing (maker/taker pricing)
-    // - Расчёт и удержание комиссий во время исполнения
-    // - Проверку лимитов риска перед исполнением
-    // - Аудит всех сделок для compliance
-    // - Optimistic locking для конкурентного доступа
-    // - Поддержку частичного исполнения с разными уровнями заполнения
 
     /**
      * Отменяет ордер в стакане (если он там есть).
