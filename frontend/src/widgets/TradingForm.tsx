@@ -1,9 +1,13 @@
 import React, { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
+import { useAuthStore } from '../entities/user/model/authStore';
 import api from '../shared/api/base';
 
 export const TradingForm: React.FC<{ symbol: string }> = ({ symbol }) => {
+  const token = useAuthStore(state => state.token);
   const [side, setSide] = useState<'BUY' | 'SELL'>('BUY');
+// ... rest of state
   const [type, setType] = useState<'LIMIT' | 'MARKET'>('LIMIT');
   const [quantity, setQuantity] = useState('');
   const [price, setPrice] = useState('');
@@ -28,14 +32,27 @@ export const TradingForm: React.FC<{ symbol: string }> = ({ symbol }) => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     mutation.mutate({
-      baseAsset,
-      quoteAsset,
-      side,
-      type,
+      baseAsset, quoteAsset, side, type,
       quantity: parseFloat(quantity),
       price: type === 'LIMIT' ? parseFloat(price) : null,
     });
   };
+
+  if (!token) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[280px] text-center space-y-4 border-2 border-dashed rounded-lg p-4">
+        <p className="text-muted-foreground">Please login to start trading</p>
+        <div className="flex gap-4">
+          <Link to="/login" className="px-4 py-2 bg-primary text-primary-foreground rounded hover:opacity-90 font-medium">
+            Login
+          </Link>
+          <Link to="/register" className="px-4 py-2 border rounded hover:bg-accent font-medium">
+            Register
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">

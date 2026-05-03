@@ -1,6 +1,8 @@
 import axios from 'axios';
+import { useAuthStore } from '../../entities/user/model/authStore';
 
 const api = axios.create({
+// ... rest of config
   baseURL: '/api',
   headers: {
     'Content-Type': 'application/json',
@@ -19,9 +21,7 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401 || error.response?.status === 403) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('auth-storage');
-      window.location.href = '/login';
+      useAuthStore.getState().logout();
     }
     return Promise.reject(error);
   }
