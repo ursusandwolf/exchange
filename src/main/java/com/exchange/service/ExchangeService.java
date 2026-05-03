@@ -87,6 +87,11 @@ public class ExchangeService {
             throw new IllegalArgumentException("Пользователь с таким именем уже существует");
         }
         User user = new User(username, passwordEncoder.encode(password));
+        
+        // Дарим стартовый капитал для тестов
+        user.getWallet().credit("USDT", new BigDecimal("50000"));
+        user.getWallet().credit("BTC", new BigDecimal("1"));
+        
         return userRepository.save(user);
     }
 
@@ -95,6 +100,18 @@ public class ExchangeService {
      */
     public User getUser(String userId) {
         return userRepository.findById(userId).orElse(null);
+    }
+
+    /**
+     * Пополняет баланс пользователя (с сохранением в БД).
+     */
+    @Transactional
+    public void deposit(String userId, String asset, BigDecimal amount) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден: " + userId));
+        user.deposit(asset, amount);
+        userRepository.save(user);
+        log.info("Deposited {} {} to user {}", amount, asset, userId);
     }
 
     /**
@@ -111,6 +128,7 @@ public class ExchangeService {
      * Принимает ордер от пользователя.
      * Использует блокировку по паре для обеспечения атомарности матчинга.
      */
+    @Transactional
     public List<Trade> submitOrder(User user, String baseAsset, String quoteAsset, 
                                    Side side, BigDecimal quantity, BigDecimal price, BigDecimal priceLimit) {
         String symbol = baseAsset + "/" + quoteAsset;
@@ -224,7 +242,9 @@ public class ExchangeService {
                 OrderBook orderBook = getOrderBookByAssets(order.getBaseAsset(), order.getQuoteAsset());
                 BigDecimal bestAsk = orderBook != null ? orderBook.getBestAsk() : null;
                 if (bestAsk != null) {
-                    requiredAmount = order.getQuantity().multiply(bestAsk);
+                    // Добавляем 10% запас для рыночных ордеров, чтобы избежать нехватки средств при проскальзывании
+                    BigDecimal slippageBuffer = new BigDecimal("1.10");
+                    requiredAmount = order.getQuantity().multiply(bestAsk).multiply(slippageBuffer);
                 } else {
                     throw new IllegalArgumentException("Нет доступных ордеров на продажу для MARKET ордера");
                 }

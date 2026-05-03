@@ -74,9 +74,9 @@ Spring автоматически находит классы, помеченн�
 3.  **Transaction Start**: Spring открывает транзакцию.
 4.  **Validation**: Проверка баланса в БД.
 5.  **Matching**: Поиск встречных ордеров в `OrderBook`.
-6.  **Settlement**: Если сделка найдена, `ExchangeService` вызывает `Wallet.credit/debit`.
-7.  **Persistence**: Сохранение обновленных сущностей через `userRepository.save()`.
-8.  **Transaction Commit**: Если ошибок нет, данные фиксируются в БД.
+6. Settlement: Если сделка найдена, `ExchangeService` вызывает `Wallet.credit/debit`.
+7. Persistence: Сохранение обновленных сущностей через `userRepository.save()`. Для прямых начислений (например, через админ-панель или инициализатор) используется метод `deposit(userId, asset, amount)`, гарантирующий запись в БД.
+8. Transaction Commit: Если ошибок нет, данные фиксируются в БД.
 
 ---
 

@@ -9,4 +9,5 @@ import java.util.Optional;
 public interface CandleRepository extends JpaRepository<Candle, String> {
     Optional<Candle> findBySymbolAndIntervalAndOpenTime(String symbol, String interval, LocalDateTime openTime);
     List<Candle> findBySymbolAndIntervalOrderByOpenTimeDesc(String symbol, String interval);
+    List<Candle> findBySymbolAndIntervalAndOpenTimeBetweenOrderByOpenTimeAsc(String symbol, String interval, LocalDateTime start, LocalDateTime end);
 }

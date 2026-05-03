@@ -30,7 +30,7 @@ public class AuthController {
     public ResponseEntity<AuthResponse> register(@RequestBody @Valid RegisterRequest request) {
         User user = exchangeService.registerUser(request.username(), request.password());
         String token = jwtService.generateToken(user.getUsername());
-        return ResponseEntity.ok(new AuthResponse(token, user.getUsername()));
+        return ResponseEntity.ok(new AuthResponse(token, user.getUsername(), user.getId()));
     }
 
     @PostMapping("/login")
@@ -43,6 +43,6 @@ public class AuthController {
         }
         
         String token = jwtService.generateToken(user.getUsername());
-        return ResponseEntity.ok(new AuthResponse(token, user.getUsername()));
+        return ResponseEntity.ok(new AuthResponse(token, user.getUsername(), user.getId()));
     }
 }

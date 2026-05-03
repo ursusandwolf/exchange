@@ -44,6 +44,7 @@ public class SecurityConfig {
             .csrf(AbstractHttpConfigurer::disable)
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/**").permitAll()
+                .requestMatchers("/api/tradingview/**").permitAll()
                 .requestMatchers("/h2-console/**").permitAll()
                 .requestMatchers("/ws-exchange/**").permitAll()
                 .anyRequest().authenticated()

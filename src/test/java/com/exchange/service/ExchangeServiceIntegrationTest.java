@@ -13,9 +13,11 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
 @SpringBootTest
+@ActiveProfiles("test")
 class ExchangeServiceIntegrationTest {
 
     @Autowired
@@ -30,16 +32,8 @@ class ExchangeServiceIntegrationTest {
         User alice = exchangeService.registerUser("Alice", "password123");
         User bob = exchangeService.registerUser("Bob", "password123");
 
-        // 2. Пополнение балансов
-        // Alice покупает 1 BTC за 45000. Комиссия Taker 0.1% = 45.
-        // Нужно минимум 45045 USDT. Дадим с запасом.
-        alice.getWallet().credit("USDT", new BigDecimal("50000"));
-        bob.getWallet().credit("BTC", new BigDecimal("1"));
+        // 2. Пополнение балансов (не требуется, так как registerUser дает стартовый капитал)
         
-        userRepository.save(alice);
-        userRepository.save(bob);
-        userRepository.flush(); // Гарантируем сброс в БД
-
         // 3. Bob выставляет SELL ордер
         exchangeService.submitOrder(
             bob, "BTC", "USDT", Side.SELL, 
@@ -68,12 +62,12 @@ class ExchangeServiceIntegrationTest {
         User aliceAfter = exchangeService.getUser(alice.getId());
         User bobAfter = exchangeService.getUser(bob.getId());
 
-        // Проверка баланса Alice: потратила 45000 + 45 USDT, получила 1 BTC
+        // Проверка баланса Alice: было 50000 USDT, потратила 45000 + 45 USDT, получила 1 BTC (было 1 BTC -> стало 2 BTC)
         assertThat(aliceAfter.getWallet().getBalance("USDT")).isEqualByComparingTo("4955");
-        assertThat(aliceAfter.getWallet().getBalance("BTC")).isEqualByComparingTo("1");
+        assertThat(aliceAfter.getWallet().getBalance("BTC")).isEqualByComparingTo("2");
 
-        // Проверка баланса Bob: получил 45000 - 22.5 USDT, потратил 1 BTC
-        assertThat(bobAfter.getWallet().getBalance("USDT")).isEqualByComparingTo("44977.5");
+        // Проверка баланса Bob: было 50000 USDT, получил 45000 - 22.5 USDT, потратил 1 BTC (было 1 BTC -> стало 0 BTC)
+        assertThat(bobAfter.getWallet().getBalance("USDT")).isEqualByComparingTo("94977.5");
         assertThat(bobAfter.getWallet().getBalance("BTC")).isEqualByComparingTo("0");
     }
 }
