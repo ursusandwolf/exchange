@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { createChart, type ISeriesApi, type CandlestickData, CandlestickSeries } from 'lightweight-charts';
-import api from '../shared/api/base';
+import { api } from '../shared/api';
 
 interface ChartProps {
   symbol: string;
@@ -14,6 +14,8 @@ export const Chart: React.FC<ChartProps> = ({ symbol }) => {
     if (!chartContainerRef.current) return;
 
     const chart = createChart(chartContainerRef.current, {
+      width: chartContainerRef.current.clientWidth,
+      height: chartContainerRef.current.clientHeight,
       layout: {
         background: { color: 'transparent' },
         textColor: '#666',
@@ -38,13 +40,14 @@ export const Chart: React.FC<ChartProps> = ({ symbol }) => {
 
     seriesRef.current = candlestickSeries;
 
-    const handleResize = () => {
-      if (chartContainerRef.current) {
-        chart.applyOptions({ width: chartContainerRef.current.clientWidth });
+    const resizeObserver = new ResizeObserver(entries => {
+      if (entries[0].contentRect && chartContainerRef.current) {
+        const { width, height } = entries[0].contentRect;
+        chart.applyOptions({ width, height });
       }
-    };
+    });
 
-    window.addEventListener('resize', handleResize);
+    resizeObserver.observe(chartContainerRef.current);
 
     // Fetch initial data
     const fetchHistory = async () => {
@@ -73,7 +76,7 @@ export const Chart: React.FC<ChartProps> = ({ symbol }) => {
     fetchHistory();
 
     return () => {
-      window.removeEventListener('resize', handleResize);
+      resizeObserver.disconnect();
       chart.remove();
     };
   }, [symbol]);

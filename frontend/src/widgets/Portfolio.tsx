@@ -1,7 +1,7 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useAuthStore } from '../entities/user/model/authStore';
-import api from '../shared/api/base';
+import { useAuthStore } from '../entities/user';
+import { api } from '../shared/api';
 
 export const Portfolio: React.FC = () => {
   const token = useAuthStore(state => state.token);

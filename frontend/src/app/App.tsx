@@ -5,8 +5,13 @@ import { Layout } from './Layout';
 import { DashboardPage } from '../pages/DashboardPage';
 import { LoginPage } from '../pages/LoginPage';
 import { RegisterPage } from '../pages/RegisterPage';
+import { useAuthStore } from '../entities/user/model/authStore';
+import { setupResponseInterceptors } from '../shared/api/base';
 
 const queryClient = new QueryClient();
+
+// Initialize API interceptors with logout callback to avoid circular dependency
+setupResponseInterceptors(() => useAuthStore.getState().logout());
 
 export const App: React.FC = () => {
   return (

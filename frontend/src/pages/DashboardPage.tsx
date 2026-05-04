@@ -1,9 +1,5 @@
 import React from 'react';
-import { Chart } from '../widgets/Chart';
-import { OrderBook } from '../widgets/OrderBook';
-import { TradingForm } from '../widgets/TradingForm';
-import { Portfolio } from '../widgets/Portfolio';
-import { RecentTrades } from '../widgets/RecentTrades';
+import { Chart, OrderBook, TradingForm, Portfolio, RecentTrades } from '../widgets';
 
 export const DashboardPage: React.FC = () => {
   const symbol = "BTC/USDT";

@@ -1,8 +1,6 @@
 import axios from 'axios';
-import { useAuthStore } from '../../entities/user/model/authStore';
 
 const api = axios.create({
-// ... rest of config
   baseURL: '/api',
   headers: {
     'Content-Type': 'application/json',
@@ -10,21 +8,30 @@ const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+  const authData = localStorage.getItem('auth-storage');
+  if (authData) {
+    try {
+      const { state } = JSON.parse(authData);
+      if (state.token) {
+        config.headers.Authorization = `Bearer ${state.token}`;
+      }
+    } catch {
+      // silent fail
+    }
   }
   return config;
 });
 
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401 || error.response?.status === 403) {
-      useAuthStore.getState().logout();
+export const setupResponseInterceptors = (onUnauthorized: () => void) => {
+  api.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        onUnauthorized();
+      }
+      return Promise.reject(error);
     }
-    return Promise.reject(error);
-  }
-);
+  );
+};
 
 export default api;

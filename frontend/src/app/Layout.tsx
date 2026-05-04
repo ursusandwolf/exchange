@@ -1,5 +1,5 @@
 import React from 'react';
-import { useAuthStore } from '../entities/user/model/authStore';
+import { useAuthStore } from '../entities/user';
 import { Outlet, Link } from 'react-router-dom';
 
 export const Layout: React.FC = () => {

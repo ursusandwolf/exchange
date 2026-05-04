@@ -13,8 +13,8 @@ export const RecentTrades: React.FC<{ symbol: string }> = ({ symbol }) => {
   const [trades, setTrades] = useState<TradeUpdate[]>([]);
 
   useEffect(() => {
-    // Используем абсолютный путь к бэкенду
-    const socket = new SockJS('http://localhost:8080/ws-exchange');
+    // Используем относительный путь
+    const socket = new SockJS('/ws-exchange');
     const client = new Client({
       webSocketFactory: () => socket,
       reconnectDelay: 5000,

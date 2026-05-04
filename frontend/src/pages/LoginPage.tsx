@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../shared/api/base';
-import { useAuthStore } from '../entities/user/model/authStore';
+import { AxiosError } from 'axios';
+import { api } from '../shared/api';
+import { useAuthStore } from '../entities/user';
 
 export const LoginPage: React.FC = () => {
   const [username, setUsername] = useState('');
@@ -16,14 +17,18 @@ export const LoginPage: React.FC = () => {
       const response = await api.post('/auth/login', { username, password });
       setAuth(response.data.token, response.data.username, response.data.userId);
       navigate('/');
-    } catch (err: any) {
-      const data = err.response?.data;
-      if (typeof data === 'string') {
-        setError(data);
-      } else if (typeof data === 'object' && data !== null) {
-        setError(Object.values(data).join(', '));
+    } catch (err: unknown) {
+      if (err instanceof AxiosError) {
+        const data = err.response?.data;
+        if (typeof data === 'string') {
+          setError(data);
+        } else if (typeof data === 'object' && data !== null) {
+          setError(Object.values(data).join(', '));
+        } else {
+          setError('Login failed');
+        }
       } else {
-        setError('Login failed');
+        setError('An unexpected error occurred');
       }
     }
   };
