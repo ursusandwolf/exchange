@@ -33,7 +33,8 @@ public class OrderBook {
             throw new IllegalArgumentException("Symbol mismatch: " + symbol);
         }
         NavigableMap<BigDecimal, OrderQueue> targetMap = order.getSide() == Side.BUY ? bids : asks;
-        targetMap.computeIfAbsent(order.getPrice(), k -> new OrderQueue()).addOrder(order);
+        BigDecimal priceVal = order.getPrice() != null ? order.getPrice().value() : BigDecimal.ZERO;
+        targetMap.computeIfAbsent(priceVal, k -> new OrderQueue()).addOrder(order);
         orderIndex.put(order.getId(), order);
     }
 
@@ -55,10 +56,11 @@ public class OrderBook {
 
     public synchronized void removeOrder(Order order) {
         NavigableMap<BigDecimal, OrderQueue> targetMap = order.getSide() == Side.BUY ? bids : asks;
-        OrderQueue queue = targetMap.get(order.getPrice());
+        BigDecimal priceVal = order.getPrice() != null ? order.getPrice().value() : BigDecimal.ZERO;
+        OrderQueue queue = targetMap.get(priceVal);
         if (queue != null) {
             queue.removeOrder(order);
-            if (queue.isEmpty()) targetMap.remove(order.getPrice());
+            if (queue.isEmpty()) targetMap.remove(priceVal);
         }
         orderIndex.remove(order.getId());
     }
@@ -72,12 +74,12 @@ public class OrderBook {
             BigDecimal bestAsk = getBestAsk();
             return (order.getType() == OrderType.MARKET || order.getPrice() == null) 
                 ? !asks.isEmpty() 
-                : bestAsk != null && bestAsk.compareTo(order.getPrice()) <= 0;
+                : bestAsk != null && bestAsk.compareTo(order.getPrice().value()) <= 0;
         } else {
             BigDecimal bestBid = getBestBid();
             return (order.getType() == OrderType.MARKET || order.getPrice() == null) 
                 ? !bids.isEmpty() 
-                : bestBid != null && bestBid.compareTo(order.getPrice()) >= 0;
+                : bestBid != null && bestBid.compareTo(order.getPrice().value()) >= 0;
         }
     }
 

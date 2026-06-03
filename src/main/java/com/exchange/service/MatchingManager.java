@@ -32,7 +32,7 @@ public class MatchingManager {
         
         for (Order order : activeOrders) {
             if (order.getType() == com.exchange.enums.OrderType.LIMIT || order.getType() == com.exchange.enums.OrderType.MARKET) {
-                OrderBook orderBook = getOrderBook(order.getBaseAsset(), order.getQuoteAsset());
+                OrderBook orderBook = getOrderBook(order.getBaseAsset().value(), order.getQuoteAsset().value());
                 orderBook.addOrder(order);
             } else {
                 addTriggeredOrder(order);
@@ -56,12 +56,12 @@ public class MatchingManager {
                 // Stop Loss: trigger when price goes BELOW (for sell) or ABOVE (for buy) triggerPrice?
                 // Standard: Sell Stop Loss triggers when price hits or goes below.
                 // Buy Stop Loss triggers when price hits or goes above.
-                if (order.getSide() == com.exchange.enums.Side.SELL && lastPrice.compareTo(order.getTriggerPrice()) <= 0) shouldTrigger = true;
-                if (order.getSide() == com.exchange.enums.Side.BUY && lastPrice.compareTo(order.getTriggerPrice()) >= 0) shouldTrigger = true;
+                if (order.getSide() == com.exchange.enums.Side.SELL && lastPrice.compareTo(order.getTriggerPrice().value()) <= 0) shouldTrigger = true;
+                if (order.getSide() == com.exchange.enums.Side.BUY && lastPrice.compareTo(order.getTriggerPrice().value()) >= 0) shouldTrigger = true;
             } else if (order.getType() == com.exchange.enums.OrderType.TAKE_PROFIT) {
                 // Take Profit: Sell triggers when price hits or goes above.
-                if (order.getSide() == com.exchange.enums.Side.SELL && lastPrice.compareTo(order.getTriggerPrice()) >= 0) shouldTrigger = true;
-                if (order.getSide() == com.exchange.enums.Side.BUY && lastPrice.compareTo(order.getTriggerPrice()) <= 0) shouldTrigger = true;
+                if (order.getSide() == com.exchange.enums.Side.SELL && lastPrice.compareTo(order.getTriggerPrice().value()) >= 0) shouldTrigger = true;
+                if (order.getSide() == com.exchange.enums.Side.BUY && lastPrice.compareTo(order.getTriggerPrice().value()) <= 0) shouldTrigger = true;
             }
             
             if (shouldTrigger) {

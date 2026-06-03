@@ -1,5 +1,7 @@
 package com.exchange.model;
 
+import com.alex.fin.core.domain.common.Price;
+import com.alex.fin.core.domain.common.Quantity;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -29,16 +31,16 @@ public class Candle {
     private String interval; // e.g., "1m"
     private LocalDateTime openTime;
     
-    private BigDecimal open;
-    private BigDecimal high;
-    private BigDecimal low;
-    private BigDecimal close;
-    private BigDecimal volume;
+    private Price open;
+    private Price high;
+    private Price low;
+    private Price close;
+    private Quantity volume;
 
-    public void update(BigDecimal price, BigDecimal quantity) {
+    public void update(Price price, Quantity quantity) {
         this.close = price;
-        this.volume = this.volume.add(quantity);
-        if (price.compareTo(this.high) > 0) this.high = price;
-        if (price.compareTo(this.low) < 0) this.low = price;
+        this.volume = new Quantity(this.volume.value().add(quantity.value()));
+        if (price.value().compareTo(this.high.value()) > 0) this.high = price;
+        if (price.value().compareTo(this.low.value()) < 0) this.low = price;
     }
 }

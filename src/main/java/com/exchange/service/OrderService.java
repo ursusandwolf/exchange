@@ -1,5 +1,9 @@
 package com.exchange.service;
 
+import com.alex.fin.core.domain.common.InstrumentId;
+import com.alex.fin.core.domain.common.Price;
+import com.alex.fin.core.domain.common.Quantity;
+import com.alex.fin.core.domain.common.CurrencyCode;
 import com.exchange.dto.OrderRequest;
 import com.exchange.engine.MatchResult;
 import com.exchange.engine.MatchingEngine;
@@ -57,11 +61,19 @@ public class OrderService {
         Object lock = locks.computeIfAbsent(symbol, k -> new Object());
         
         synchronized (lock) {
+            InstrumentId baseId = new InstrumentId(request.baseAsset());
+            InstrumentId quoteId = new InstrumentId(request.quoteAsset());
+            CurrencyCode quoteCurrency = new CurrencyCode(request.quoteAsset());
+            Quantity quantity = new Quantity(request.quantity());
+            Price price = request.price() != null ? new Price(request.price(), quoteCurrency) : null;
+            Price triggerPrice = request.triggerPrice() != null ? new Price(request.triggerPrice(), quoteCurrency) : null;
+            Price priceLimit = request.priceLimit() != null ? new Price(request.priceLimit(), quoteCurrency) : null;
+
             if (request.type() == OrderType.STOP_LOSS || request.type() == OrderType.TAKE_PROFIT) {
                 return transactionTemplate.execute(status -> {
-                    Order order = Order.triggerOrder(user.getId(), request.baseAsset(), request.quoteAsset(), 
-                                                    request.side(), request.type(), request.quantity(), 
-                                                    request.price(), request.triggerPrice());
+                    Order order = Order.triggerOrder(user.getId(), baseId, quoteId, 
+                                                    request.side(), request.type(), quantity, 
+                                                    price, triggerPrice);
                     orderRepository.save(order);
                     validateAndReserve(user.getId(), order);
                     matchingManager.addTriggeredOrder(order);
@@ -71,17 +83,17 @@ public class OrderService {
             }
 
             return transactionTemplate.execute(status -> 
-                executeOrderTransaction(user.getId(), request.baseAsset(), request.quoteAsset(), 
-                                       request.side(), request.type(), request.quantity(), 
-                                       request.price(), request.priceLimit())
+                executeOrderTransaction(user.getId(), baseId, quoteId, 
+                                       request.side(), request.type(), quantity, 
+                                       price, priceLimit)
             );
         }
     }
 
-    private List<Trade> executeOrderTransaction(String userId, String baseAsset, String quoteAsset, 
-                                                Side side, OrderType type, BigDecimal quantity, 
-                                                BigDecimal price, BigDecimal priceLimit) {
-        OrderBook orderBook = matchingManager.getOrderBook(baseAsset, quoteAsset);
+    private List<Trade> executeOrderTransaction(String userId, InstrumentId baseAsset, InstrumentId quoteAsset, 
+                                                Side side, OrderType type, Quantity quantity, 
+                                                Price price, Price priceLimit) {
+        OrderBook orderBook = matchingManager.getOrderBook(baseAsset.value(), quoteAsset.value());
         
         Order order = (type == OrderType.LIMIT) 
             ? Order.limitOrder(userId, baseAsset, quoteAsset, side, quantity, price)
@@ -110,10 +122,10 @@ public class OrderService {
         
         // After trade, check if any triggered orders should be activated
         if (!result.getTrades().isEmpty()) {
-            BigDecimal lastPrice = result.getTrades().get(result.getTrades().size() - 1).getPrice();
+            Price lastPrice = result.getTrades().get(result.getTrades().size() - 1).getPrice();
             // We can't call it directly here because we are in a transaction and synchronized block.
             // But we SHOULD call it after commit.
-            registerPostCommitTriggerCheck(order.getSymbol(), lastPrice);
+            registerPostCommitTriggerCheck(order.getSymbol(), lastPrice.value());
         }
         
         return result.getTrades();
@@ -154,31 +166,24 @@ public class OrderService {
         Object lock = locks.computeIfAbsent(triggerOrder.getSymbol(), k -> new Object());
         synchronized (lock) {
             transactionTemplate.execute(status -> {
-                OrderBook orderBook = matchingManager.getOrderBook(triggerOrder.getBaseAsset(), triggerOrder.getQuoteAsset());
+                OrderBook orderBook = matchingManager.getOrderBook(triggerOrder.getBaseAsset().value(), triggerOrder.getQuoteAsset().value());
                 
                 // Триггерный ордер превращается в лимитный или рыночный.
-                // В нашей реализации STOP_LOSS/TAKE_PROFIT имеют опциональную цену исполнения.
-                // Если цена null - это MARKET, если есть - это LIMIT.
                 Order executableOrder;
                 if (triggerOrder.getPrice() != null) {
                     executableOrder = Order.limitOrder(triggerOrder.getUserId(), triggerOrder.getBaseAsset(), 
                                                      triggerOrder.getQuoteAsset(), triggerOrder.getSide(), 
-                                                     triggerOrder.getRemainingQuantity(), triggerOrder.getPrice());
+                                                     new Quantity(triggerOrder.getRemainingQuantity()), triggerOrder.getPrice());
                 } else {
                     executableOrder = Order.marketOrder(triggerOrder.getUserId(), triggerOrder.getBaseAsset(), 
                                                       triggerOrder.getQuoteAsset(), triggerOrder.getSide(), 
-                                                      triggerOrder.getRemainingQuantity(), null);
+                                                      new Quantity(triggerOrder.getRemainingQuantity()), null);
                 }
                 
-                // Мы не резервируем заново, так как резерв уже был сделан при создании триггерного ордера.
-                // Но нам нужно перенести резерв на новый ордер или связать их.
-                // Для простоты: пометим триггерный как FILLED (или TRIGGERED) и создадим новый.
                 triggerOrder.addFilledQuantity(triggerOrder.getRemainingQuantity()); // Mark as done
                 orderRepository.save(triggerOrder);
                 
                 orderRepository.save(executableOrder);
-                // Важно: нужно "перепривязать" резерв. В текущей модели резерв привязан к ассету в кошельке, а не к ID ордера.
-                // Поэтому просто вызываем матчинг.
                 
                 MatchResult result = matchingEngine.match(orderBook, executableOrder);
                 for (Trade trade : result.getTrades()) {
@@ -202,8 +207,8 @@ public class OrderService {
         for (Trade trade : result.getTrades()) {
             Order buyOrder = trade.getBuyOrder();
             Order sellOrder = trade.getSellOrder();
-            buyOrder.addFilledQuantity(trade.getQuantity());
-            sellOrder.addFilledQuantity(trade.getQuantity());
+            buyOrder.addFilledQuantity(trade.getQuantity().value());
+            sellOrder.addFilledQuantity(trade.getQuantity().value());
             orderRepository.save(buyOrder);
             orderRepository.save(sellOrder);
         }
@@ -234,13 +239,13 @@ public class OrderService {
                     return userRepository.save(u);
                 });
 
-        String quoteAsset = trade.getBuyOrder().getQuoteAsset();
-        String baseAsset = trade.getBuyOrder().getBaseAsset();
+        String quoteAsset = trade.getBuyOrder().getQuoteAsset().value();
+        String baseAsset = trade.getBuyOrder().getBaseAsset().value();
         
         walletService.debitReserved(trade.getBuyerId(), quoteAsset, trade.getTotalAmount().add(trade.getBuyerFee()), "Trade payment (Buyer)");
-        walletService.credit(trade.getBuyerId(), baseAsset, trade.getQuantity(), "Trade receipt (Buyer)");
+        walletService.credit(trade.getBuyerId(), baseAsset, trade.getQuantity().value(), "Trade receipt (Buyer)");
         
-        walletService.debitReserved(trade.getSellerId(), baseAsset, trade.getQuantity(), "Trade delivery (Seller)");
+        walletService.debitReserved(trade.getSellerId(), baseAsset, trade.getQuantity().value(), "Trade delivery (Seller)");
         walletService.credit(trade.getSellerId(), quoteAsset, trade.getTotalAmount().subtract(trade.getSellerFee()), "Trade receipt (Seller)");
         
         walletService.credit(feeCollector.getId(), quoteAsset, trade.getBuyerFee().add(trade.getSellerFee()), "Fee collection from trade " + trade.getId());
@@ -250,22 +255,20 @@ public class OrderService {
         if (order.getSide() == Side.BUY) {
             BigDecimal requiredAmount;
             if (order.getType() == OrderType.MARKET) {
-                OrderBook orderBook = matchingManager.getOrderBook(order.getBaseAsset(), order.getQuoteAsset());
+                OrderBook orderBook = matchingManager.getOrderBook(order.getBaseAsset().value(), order.getQuoteAsset().value());
                 BigDecimal bestAsk = orderBook.getBestAsk();
                 if (bestAsk == null) throw new IllegalArgumentException("No liquidity for MARKET order");
-                requiredAmount = order.getQuantity().multiply(bestAsk).multiply(new BigDecimal("1.10"));
+                requiredAmount = order.getQuantity().value().multiply(bestAsk).multiply(new BigDecimal("1.10"));
             } else if (order.getType() == OrderType.LIMIT) {
-                requiredAmount = order.getQuantity().multiply(order.getPrice());
+                requiredAmount = order.getQuantity().value().multiply(order.getPrice().value());
             } else {
-                // For STOP_LOSS/TAKE_PROFIT BUY
-                // We use triggerPrice or price (whichever is higher/available) to estimate
-                BigDecimal estPrice = order.getPrice() != null ? order.getPrice() : order.getTriggerPrice();
-                requiredAmount = order.getQuantity().multiply(estPrice).multiply(new BigDecimal("1.20")); // Higher buffer
+                BigDecimal estPriceVal = order.getPrice() != null ? order.getPrice().value() : order.getTriggerPrice().value();
+                requiredAmount = order.getQuantity().value().multiply(estPriceVal).multiply(new BigDecimal("1.20")); // Higher buffer
             }
             BigDecimal estimatedFee = feeService.calculateTakerFee(requiredAmount);
-            walletService.reserve(userId, order.getQuoteAsset(), requiredAmount.add(estimatedFee), "Reserve for " + order.getType() + " BUY order " + order.getId());
+            walletService.reserve(userId, order.getQuoteAsset().value(), requiredAmount.add(estimatedFee), "Reserve for " + order.getType() + " BUY order " + order.getId());
         } else {
-            walletService.reserve(userId, order.getBaseAsset(), order.getQuantity(), "Reserve for " + order.getType() + " SELL order " + order.getId());
+            walletService.reserve(userId, order.getBaseAsset().value(), order.getQuantity().value(), "Reserve for " + order.getType() + " SELL order " + order.getId());
         }
     }
 
@@ -274,7 +277,7 @@ public class OrderService {
 
     private void releaseUnusedReserve(String userId, Order order) {
         Wallet wallet = walletService.getWallet(userId);
-        String asset = order.getSide() == Side.BUY ? order.getQuoteAsset() : order.getBaseAsset();
+        String asset = order.getSide() == Side.BUY ? order.getQuoteAsset().value() : order.getBaseAsset().value();
         BigDecimal reserved = wallet.getReserved(asset);
         if (reserved.compareTo(BigDecimal.ZERO) > 0) {
             walletService.unreserve(userId, asset, reserved, "Release unused reserve for order " + order.getId());

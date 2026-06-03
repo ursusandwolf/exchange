@@ -40,8 +40,8 @@ public class OrderController {
                 t.getId(),
                 t.getBuyOrder().getId(),
                 t.getSellOrder().getId(),
-                t.getPrice(),
-                t.getQuantity(),
+                t.getPrice().value(),
+                t.getQuantity().value(),
                 t.getTotalAmount(),
                 LocalDateTime.ofInstant(t.getTimestamp(), ZoneId.systemDefault())
             ))
@@ -67,13 +67,13 @@ public class OrderController {
         return orderService.getUserOrders(user.getId()).stream()
             .map(o -> new com.exchange.dto.OrderResponse(
                 o.getId(),
-                o.getBaseAsset(),
-                o.getQuoteAsset(),
+                o.getBaseAsset().value(),
+                o.getQuoteAsset().value(),
                 o.getSide(),
                 o.getType(),
-                o.getQuantity(),
-                o.getPrice(),
-                o.getFilledQuantity(),
+                o.getQuantity().value(),
+                o.getPrice() != null ? o.getPrice().value() : null,
+                o.getFilledQuantity().value(),
                 o.getStatus(),
                 o.getCreatedAt()
             ))

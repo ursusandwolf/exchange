@@ -1,5 +1,8 @@
 package com.exchange.model;
 
+import com.alex.fin.core.domain.common.InstrumentId;
+import com.alex.fin.core.domain.common.Price;
+import com.alex.fin.core.domain.common.Quantity;
 import com.exchange.enums.OrderStatus;
 import com.exchange.enums.OrderType;
 import com.exchange.enums.Side;
@@ -28,10 +31,10 @@ public class Order {
     private String userId;
     
     @Column(nullable = false)
-    private String baseAsset;      // Например, BTC
+    private InstrumentId baseAsset;      // Например, BTC
     
     @Column(nullable = false)
-    private String quoteAsset;     // Например, USDT
+    private InstrumentId quoteAsset;     // Например, USDT
     
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -42,23 +45,23 @@ public class Order {
     private OrderType type;        // LIMIT, MARKET, STOP_LOSS, TAKE_PROFIT
     
     @Column(precision = 24, scale = 8, nullable = false)
-    private BigDecimal quantity;   // Количество базового актива
+    private Quantity quantity;   // Количество базового актива
     
     @Column(precision = 24, scale = 8)
-    private BigDecimal price;      // Цена за единицу (null для MARKET ордеров)
+    private Price price;      // Цена за единицу (null для MARKET ордеров)
     
     @Column(precision = 24, scale = 8)
-    private BigDecimal priceLimit; // Лимит проскальзывания для MARKET ордеров
+    private Price priceLimit; // Лимит проскальзывания для MARKET ордеров
 
     @Column(precision = 24, scale = 8)
-    private BigDecimal triggerPrice; // Цена активации для STOP_LOSS / TAKE_PROFIT
+    private Price triggerPrice; // Цена активации для STOP_LOSS / TAKE_PROFIT
     
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private OrderStatus status;
     
     @Column(precision = 24, scale = 8, nullable = false)
-    private BigDecimal filledQuantity;   // Сколько уже исполнено
+    private Quantity filledQuantity;   // Сколько уже исполнено
     
     @Column(nullable = false)
     private Instant createdAt;
@@ -69,8 +72,8 @@ public class Order {
     @Version
     private Long version;
 
-    private Order(String userId, String baseAsset, String quoteAsset, Side side, 
-                  OrderType type, BigDecimal quantity, BigDecimal price, BigDecimal priceLimit, BigDecimal triggerPrice) {
+    private Order(String userId, InstrumentId baseAsset, InstrumentId quoteAsset, Side side, 
+                  OrderType type, Quantity quantity, Price price, Price priceLimit, Price triggerPrice) {
         this.id = UUID.randomUUID().toString();
         this.userId = userId;
         this.baseAsset = baseAsset;
@@ -82,7 +85,7 @@ public class Order {
         this.priceLimit = priceLimit;
         this.triggerPrice = triggerPrice;
         this.status = OrderStatus.PENDING;
-        this.filledQuantity = BigDecimal.ZERO;
+        this.filledQuantity = new Quantity(BigDecimal.ZERO);
         this.createdAt = Instant.now();
         this.updatedAt = this.createdAt;
     }
@@ -90,9 +93,9 @@ public class Order {
     /**
      * Фабричный метод для создания LIMIT ордера.
      */
-    public static Order limitOrder(String userId, String baseAsset, String quoteAsset, 
-                                   Side side, BigDecimal quantity, BigDecimal price) {
-        if (price == null || price.compareTo(BigDecimal.ZERO) <= 0) {
+    public static Order limitOrder(String userId, InstrumentId baseAsset, InstrumentId quoteAsset, 
+                                   Side side, Quantity quantity, Price price) {
+        if (price == null || price.value().compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Цена должна быть положительной для LIMIT ордера");
         }
         return new Order(userId, baseAsset, quoteAsset, side, OrderType.LIMIT, quantity, price, null, null);
@@ -101,17 +104,17 @@ public class Order {
     /**
      * Фабричный метод для создания MARKET ордера.
      */
-    public static Order marketOrder(String userId, String baseAsset, String quoteAsset, 
-                                    Side side, BigDecimal quantity, BigDecimal priceLimit) {
+    public static Order marketOrder(String userId, InstrumentId baseAsset, InstrumentId quoteAsset, 
+                                    Side side, Quantity quantity, Price priceLimit) {
         return new Order(userId, baseAsset, quoteAsset, side, OrderType.MARKET, quantity, null, priceLimit, null);
     }
 
     /**
      * Фабричный метод для создания STOP_LOSS / TAKE_PROFIT ордера.
      */
-    public static Order triggerOrder(String userId, String baseAsset, String quoteAsset, 
-                                    Side side, OrderType type, BigDecimal quantity, BigDecimal price, BigDecimal triggerPrice) {
-        if (triggerPrice == null || triggerPrice.compareTo(BigDecimal.ZERO) <= 0) {
+    public static Order triggerOrder(String userId, InstrumentId baseAsset, InstrumentId quoteAsset, 
+                                    Side side, OrderType type, Quantity quantity, Price price, Price triggerPrice) {
+        if (triggerPrice == null || triggerPrice.value().compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Trigger price is required");
         }
         return new Order(userId, baseAsset, quoteAsset, side, type, quantity, price, null, triggerPrice);
@@ -121,7 +124,7 @@ public class Order {
      * Возвращает торговую пару в формате "BASE/QUOTE", например "BTC/USDT".
      */
     public String getSymbol() {
-        return baseAsset + "/" + quoteAsset;
+        return baseAsset.value() + "/" + quoteAsset.value();
     }
 
     /**
@@ -131,12 +134,13 @@ public class Order {
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
             return;
         }
-        this.filledQuantity = this.filledQuantity.add(amount);
+        BigDecimal newFilled = this.filledQuantity.value().add(amount);
+        this.filledQuantity = new Quantity(newFilled);
         this.updatedAt = Instant.now();
         
-        if (this.filledQuantity.compareTo(this.quantity) >= 0) {
+        if (this.filledQuantity.value().compareTo(this.quantity.value()) >= 0) {
             this.status = OrderStatus.FILLED;
-        } else if (this.filledQuantity.compareTo(BigDecimal.ZERO) > 0) {
+        } else if (this.filledQuantity.value().compareTo(BigDecimal.ZERO) > 0) {
             this.status = OrderStatus.PARTIALLY_FILLED;
         }
     }
@@ -145,7 +149,7 @@ public class Order {
      * Возвращает оставшееся количество для исполнения.
      */
     public BigDecimal getRemainingQuantity() {
-        return this.quantity.subtract(this.filledQuantity);
+        return this.quantity.value().subtract(this.filledQuantity.value());
     }
 
     /**

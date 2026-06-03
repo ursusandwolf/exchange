@@ -1,5 +1,7 @@
 package com.exchange.model;
 
+import com.alex.fin.core.domain.common.Price;
+import com.alex.fin.core.domain.common.Quantity;
 import lombok.Getter;
 import lombok.ToString;
 
@@ -18,8 +20,8 @@ public class Trade {
     private final String symbol;           // Торговая пара, например BTC/USDT
     private final Order buyOrder;          // Ордер на покупку
     private final Order sellOrder;         // Ордер на продажу
-    private final BigDecimal price;        // Цена исполнения
-    private final BigDecimal quantity;     // Количество исполненного актива
+    private final Price price;        // Цена исполнения
+    private final Quantity quantity;     // Количество исполненного актива
     private final BigDecimal totalAmount;  // Общая сумма (price * quantity)
     private final Instant timestamp;
     
@@ -29,7 +31,7 @@ public class Trade {
     private final String takerOrderId;
     private final String makerOrderId;
 
-    public Trade(Order buyOrder, Order sellOrder, BigDecimal price, BigDecimal quantity, 
+    public Trade(Order buyOrder, Order sellOrder, Price price, Quantity quantity, 
                  BigDecimal buyerFee, BigDecimal sellerFee, String takerOrderId, String makerOrderId) {
         this.id = UUID.randomUUID().toString();
         this.symbol = buyOrder.getSymbol();
@@ -37,7 +39,7 @@ public class Trade {
         this.sellOrder = sellOrder;
         this.price = price;
         this.quantity = quantity;
-        this.totalAmount = price.multiply(quantity);
+        this.totalAmount = price.value().multiply(quantity.value());
         this.timestamp = Instant.now();
         this.buyerFee = buyerFee;
         this.sellerFee = sellerFee;

@@ -1,5 +1,8 @@
 package com.exchange.service;
 
+import com.alex.fin.core.domain.common.CurrencyCode;
+import com.alex.fin.core.domain.common.Price;
+import com.alex.fin.core.domain.common.Quantity;
 import com.exchange.dto.OrderBookUpdate;
 import com.exchange.dto.TradeResponse;
 import com.exchange.engine.OrderBook;
@@ -44,8 +47,8 @@ public class MarketDataService {
                 trade.getId(),
                 trade.getBuyOrder().getId(),
                 trade.getSellOrder().getId(),
-                trade.getPrice(),
-                trade.getQuantity(),
+                trade.getPrice().value(),
+                trade.getQuantity().value(),
                 trade.getTotalAmount(),
                 java.time.LocalDateTime.ofInstant(trade.getTimestamp(), java.time.ZoneOffset.UTC)
         );
@@ -56,7 +59,7 @@ public class MarketDataService {
         updateCandles(symbol, trade.getPrice(), trade.getQuantity(), response.timestamp());
     }
 
-    private void updateCandles(String symbol, BigDecimal price, BigDecimal quantity, LocalDateTime timestamp) {
+    private void updateCandles(String symbol, Price price, Quantity quantity, LocalDateTime timestamp) {
         // 1m candles
         LocalDateTime openTime = timestamp.truncatedTo(ChronoUnit.MINUTES);
         String interval = "1m";
@@ -70,7 +73,7 @@ public class MarketDataService {
                         .high(price)
                         .low(price)
                         .close(price)
-                        .volume(BigDecimal.ZERO)
+                        .volume(new Quantity(BigDecimal.ZERO))
                         .build());
         
         candle.update(price, quantity);

@@ -15,8 +15,14 @@
     <description>Cryptocurrency Exchange Simulation</description>
     <properties>
         <java.version>21</java.version>
+        <fin-core.version>0.1.0</fin-core.version>
     </properties>
     <dependencies>
+        <dependency>
+            <groupId>com.alex.fin</groupId>
+            <artifactId>fin-core</artifactId>
+            <version>${fin-core.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>

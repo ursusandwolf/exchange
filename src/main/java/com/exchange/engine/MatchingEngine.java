@@ -1,5 +1,7 @@
 package com.exchange.engine;
 
+import com.alex.fin.core.domain.common.Price;
+import com.alex.fin.core.domain.common.Quantity;
 import com.exchange.enums.OrderType;
 import com.exchange.enums.Side;
 import com.exchange.model.Order;
@@ -46,13 +48,10 @@ public class MatchingEngine {
             Trade trade = calculateTrade(incomingOrder, contraOrder, remainingQty, contraRemainingQty);
             if (trade != null) {
                 trades.add(trade);
-                remainingQty = remainingQty.subtract(trade.getQuantity());
+                remainingQty = remainingQty.subtract(trade.getQuantity().value());
                 
                 // Если contraOrder полностью заполнен в результате этой сделки (или серии сделок в этом цикле)
-                // На самом деле нам нужно отслеживать суммарное заполнение contraOrder в этом цикле, 
-                // но так как мы берем новый contraOrder каждый раз, или тот же если он не заполнен...
-                // В этой простой реализации contraOrder заполняется за один раз или становится полностью заполненным.
-                if (trade.getQuantity().compareTo(contraRemainingQty) >= 0) {
+                if (trade.getQuantity().value().compareTo(contraRemainingQty) >= 0) {
                     ordersToRemove.add(contraOrder);
                 }
             } else {
@@ -72,28 +71,30 @@ public class MatchingEngine {
     }
 
     private Trade calculateTrade(Order incomingOrder, Order contraOrder, BigDecimal incomingRemaining, BigDecimal contraRemaining) {
-        BigDecimal tradePrice = determineTradePrice(incomingOrder, contraOrder);
+        Price tradePrice = determineTradePrice(incomingOrder, contraOrder);
         
         // Slippage Protection check
         if (incomingOrder.getType() == OrderType.MARKET && incomingOrder.getPriceLimit() != null) {
-            if (incomingOrder.getSide() == Side.BUY && tradePrice.compareTo(incomingOrder.getPriceLimit()) > 0) {
+            if (incomingOrder.getSide() == Side.BUY && tradePrice.value().compareTo(incomingOrder.getPriceLimit().value()) > 0) {
                 return null;
             }
-            if (incomingOrder.getSide() == Side.SELL && tradePrice.compareTo(incomingOrder.getPriceLimit()) < 0) {
+            if (incomingOrder.getSide() == Side.SELL && tradePrice.value().compareTo(incomingOrder.getPriceLimit().value()) < 0) {
                 return null;
             }
         }
 
-        BigDecimal tradeQuantity = incomingRemaining.min(contraRemaining);
+        BigDecimal tradeQtyVal = incomingRemaining.min(contraRemaining);
         
-        if (tradeQuantity.compareTo(BigDecimal.ZERO) <= 0) {
+        if (tradeQtyVal.compareTo(BigDecimal.ZERO) <= 0) {
             return null;
         }
+
+        Quantity tradeQuantity = new Quantity(tradeQtyVal);
         
         Order buyOrder = incomingOrder.getSide() == Side.BUY ? incomingOrder : contraOrder;
         Order sellOrder = incomingOrder.getSide() == Side.SELL ? incomingOrder : contraOrder;
         
-        BigDecimal totalAmount = tradePrice.multiply(tradeQuantity);
+        BigDecimal totalAmount = tradePrice.value().multiply(tradeQuantity.value());
         BigDecimal buyerFee = (incomingOrder.getSide() == Side.BUY) 
                 ? feeService.calculateTakerFee(totalAmount) 
                 : feeService.calculateMakerFee(totalAmount);
@@ -105,7 +106,7 @@ public class MatchingEngine {
                                 buyerFee, sellerFee, incomingOrder.getId(), contraOrder.getId());
     }
 
-    private BigDecimal determineTradePrice(Order order, Order contraOrder) {
+    private Price determineTradePrice(Order order, Order contraOrder) {
         if (order.getType() == OrderType.MARKET) return contraOrder.getPrice();
         if (contraOrder.getType() == OrderType.MARKET) return order.getPrice();
         return contraOrder.getPrice(); // Maker price

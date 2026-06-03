@@ -79,11 +79,11 @@ public class TradingViewController {
 
         for (Candle candle : candles) {
             t.add(candle.getOpenTime().toInstant(ZoneOffset.UTC).getEpochSecond());
-            o.add(candle.getOpen());
-            h.add(candle.getHigh());
-            l.add(candle.getLow());
-            c.add(candle.getClose());
-            v.add(candle.getVolume());
+            o.add(candle.getOpen().value());
+            h.add(candle.getHigh().value());
+            l.add(candle.getLow().value());
+            c.add(candle.getClose().value());
+            v.add(candle.getVolume().value());
         }
 
         return TvHistoryResponse.builder()
