@@ -1,9 +1,11 @@
 package com.exchange.enums;
 
 /**
- * Тип ордера: LIMIT (с указанием цены) или MARKET (по лучшей доступной цене).
+ * Тип ордера.
  */
 public enum OrderType {
     LIMIT,
-    MARKET
+    MARKET,
+    STOP_LOSS,
+    TAKE_PROFIT
 }

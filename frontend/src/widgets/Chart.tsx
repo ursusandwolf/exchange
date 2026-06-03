@@ -1,6 +1,8 @@
 import React, { useEffect, useRef } from 'react';
-import { createChart, type ISeriesApi, type CandlestickData, CandlestickSeries } from 'lightweight-charts';
+import { createChart, type ISeriesApi, CandlestickSeries } from 'lightweight-charts';
 import { api } from '../shared/api';
+import { Client } from '@stomp/stompjs';
+import SockJS from 'sockjs-client';
 
 interface ChartProps {
   symbol: string;
@@ -59,7 +61,7 @@ export const Chart: React.FC<ChartProps> = ({ symbol }) => {
         });
         
         if (response.data.s === 'ok') {
-          const data: CandlestickData[] = response.data.t.map((t: number, i: number) => ({
+          const data = response.data.t.map((t: number, i: number) => ({
             time: t,
             open: response.data.o[i],
             high: response.data.h[i],
@@ -75,8 +77,31 @@ export const Chart: React.FC<ChartProps> = ({ symbol }) => {
 
     fetchHistory();
 
+    // WebSocket Updates
+    const socket = new SockJS('/ws-exchange');
+    const stompClient = new Client({
+      webSocketFactory: () => socket,
+      onConnect: () => {
+        stompClient.subscribe(`/topic/candles/${symbol}/1m`, (message) => {
+          const candle = JSON.parse(message.body);
+          // Lightweight-charts expects time in seconds for Unix timestamp
+          const timestamp = Math.floor(new Date(candle.openTime).getTime() / 1000);
+          candlestickSeries.update({
+            time: timestamp,
+            open: candle.open,
+            high: candle.high,
+            low: candle.low,
+            close: candle.close,
+          });
+        });
+      },
+    });
+
+    stompClient.activate();
+
     return () => {
       resizeObserver.disconnect();
+      stompClient.deactivate();
       chart.remove();
     };
   }, [symbol]);

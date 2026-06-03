@@ -29,23 +29,25 @@
 - [x] **Market Data Service**: Агрегация свечей (OHLCV) для графиков.
 - [x] **Java 21**: Переход на Virtual Threads для масштабируемости.
 - [x] **Fees**: Реализация системы комиссий (Maker/Taker).
+- [x] **Optimization**: Переход на LAZY загрузку в Wallet для производительности.
+- [x] **Audit**: Реализация системы аудита балансов (Transaction History).
 
 ## ✅ Завершено (Phase 6: Frontend)
 - [x] **Setup**: Инициализация React + Vite + TypeScript.
 - [x] **Auth**: Страницы Login/Register с сохранением JWT.
-- [x] **UX**: Улучшенная обработка ошибок (400 Bad Request) на страницах входа.
+- [x] **UX**: Интеграция тостов (Sonner) и валидация форм (React Hook Form + Zod).
 - [x] **Dashboard**: Главная страница с Layout.
-- [x] **Real-time**: Виджеты OrderBook и Recent Trades через WebSockets (STOMP).
-- [ ] **Market**: Компонент графика TradingView (Lightweight Charts).
-- [ ] **Trading**: Форма создания лимитных и рыночных ордеров.
-- [ ] **Portfolio**: Отображение балансов и истории ордеров пользователя.
+- [x] **Real-time**: Виджеты OrderBook и Recent Trades через WebSockets.
+- [x] **Market**: Компонент графика TradingView с real-time обновлениями.
+- [x] **Portfolio**: Виджет с вкладками балансов и истории транзакций.
 
 ## ✅ СТАБИЛЬНОСТЬ И ОШИБКИ (Recent Fixes)
-- [x] **Startup Fix**: Исправлена ошибка инициализации демо-данных (Insufficient funds) через персистентный метод `deposit`.
-- [x] **Test Isolation**: Изоляция `MarketDataInitializer` через профили (`!test`) для предотвращения загрязнения интеграционных тестов.
+- [x] **Consistency**: Исправлена проблема Match-before-Commit через TransactionTemplate.
+- [x] **Concurrency**: Блокировки вынесены наружу транзакций.
 
 ## 🚀 Будущее (Phase 5: External Integrations)
-- [x] **Price Oracle**: Получение реальных цен с Binance API (`ExternalPriceOracleService`).
-- [x] **TradingView**: Интеграция легковесного чарта для отображения свечей (UDF API).
-- [ ] **Arbitrage Bots**: Демонстрационные боты, торгующие на основе разницы цен Oracle и внутренней биржи.
+- [x] **Price Oracle**: Получение реальных цен с Binance API.
+- [x] **Arbitrage Bots**: Демонстрационный бот, торгующий на разнице цен Oracle и биржи.
+- [ ] **Advanced Matching**: Поддержка Stop-Loss и Take-Profit ордеров.
+- [ ] **Admin Panel**: Управление пользователями и мониторинг профита биржи.
 

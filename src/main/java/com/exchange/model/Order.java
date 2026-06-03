@@ -39,7 +39,7 @@ public class Order {
     
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private OrderType type;        // LIMIT или MARKET
+    private OrderType type;        // LIMIT, MARKET, STOP_LOSS, TAKE_PROFIT
     
     @Column(precision = 24, scale = 8, nullable = false)
     private BigDecimal quantity;   // Количество базового актива
@@ -49,6 +49,9 @@ public class Order {
     
     @Column(precision = 24, scale = 8)
     private BigDecimal priceLimit; // Лимит проскальзывания для MARKET ордеров
+
+    @Column(precision = 24, scale = 8)
+    private BigDecimal triggerPrice; // Цена активации для STOP_LOSS / TAKE_PROFIT
     
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -67,7 +70,7 @@ public class Order {
     private Long version;
 
     private Order(String userId, String baseAsset, String quoteAsset, Side side, 
-                  OrderType type, BigDecimal quantity, BigDecimal price, BigDecimal priceLimit) {
+                  OrderType type, BigDecimal quantity, BigDecimal price, BigDecimal priceLimit, BigDecimal triggerPrice) {
         this.id = UUID.randomUUID().toString();
         this.userId = userId;
         this.baseAsset = baseAsset;
@@ -77,6 +80,7 @@ public class Order {
         this.quantity = quantity;
         this.price = price;
         this.priceLimit = priceLimit;
+        this.triggerPrice = triggerPrice;
         this.status = OrderStatus.PENDING;
         this.filledQuantity = BigDecimal.ZERO;
         this.createdAt = Instant.now();
@@ -91,7 +95,7 @@ public class Order {
         if (price == null || price.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Цена должна быть положительной для LIMIT ордера");
         }
-        return new Order(userId, baseAsset, quoteAsset, side, OrderType.LIMIT, quantity, price, null);
+        return new Order(userId, baseAsset, quoteAsset, side, OrderType.LIMIT, quantity, price, null, null);
     }
 
     /**
@@ -99,7 +103,18 @@ public class Order {
      */
     public static Order marketOrder(String userId, String baseAsset, String quoteAsset, 
                                     Side side, BigDecimal quantity, BigDecimal priceLimit) {
-        return new Order(userId, baseAsset, quoteAsset, side, OrderType.MARKET, quantity, null, priceLimit);
+        return new Order(userId, baseAsset, quoteAsset, side, OrderType.MARKET, quantity, null, priceLimit, null);
+    }
+
+    /**
+     * Фабричный метод для создания STOP_LOSS / TAKE_PROFIT ордера.
+     */
+    public static Order triggerOrder(String userId, String baseAsset, String quoteAsset, 
+                                    Side side, OrderType type, BigDecimal quantity, BigDecimal price, BigDecimal triggerPrice) {
+        if (triggerPrice == null || triggerPrice.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Trigger price is required");
+        }
+        return new Order(userId, baseAsset, quoteAsset, side, type, quantity, price, null, triggerPrice);
     }
 
     /**

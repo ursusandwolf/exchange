@@ -24,14 +24,14 @@ public class Wallet {
     private String ownerId;
     
     // Доступный баланс по каждому активу
-    @ElementCollection(fetch = FetchType.EAGER)
+    @ElementCollection(fetch = FetchType.LAZY)
     @CollectionTable(name = "wallet_balances", joinColumns = @JoinColumn(name = "wallet_id"))
     @MapKeyColumn(name = "asset_symbol")
     @Column(name = "balance")
     private Map<String, BigDecimal> balances = new ConcurrentHashMap<>();
     
     // Зарезервированные средства под открытые ордера
-    @ElementCollection(fetch = FetchType.EAGER)
+    @ElementCollection(fetch = FetchType.LAZY)
     @CollectionTable(name = "wallet_reserved", joinColumns = @JoinColumn(name = "wallet_id"))
     @MapKeyColumn(name = "asset_symbol")
     @Column(name = "amount")
@@ -47,16 +47,15 @@ public class Wallet {
     /**
      * Зачисление средств на кошелёк.
      */
-    public synchronized void credit(String assetSymbol, BigDecimal amount) {
+    public void credit(String assetSymbol, BigDecimal amount) {
         validateAmount(amount);
         balances.merge(assetSymbol, amount, BigDecimal::add);
     }
 
     /**
      * Списывание средств с кошелька (с доступного баланса).
-     * @throws IllegalArgumentException если недостаточно средств
      */
-    public synchronized void debit(String assetSymbol, BigDecimal amount) {
+    public void debit(String assetSymbol, BigDecimal amount) {
         validateAmount(amount);
         BigDecimal balance = balances.getOrDefault(assetSymbol, BigDecimal.ZERO);
         if (balance.compareTo(amount) < 0) {
@@ -68,10 +67,8 @@ public class Wallet {
 
     /**
      * Резервирование средств под ордер.
-     * Средства переходят из доступного баланса в зарезервированные.
-     * @throws IllegalArgumentException если недостаточно доступных средств
      */
-    public synchronized void reserve(String assetSymbol, BigDecimal amount) {
+    public void reserve(String assetSymbol, BigDecimal amount) {
         validateAmount(amount);
         BigDecimal balance = balances.getOrDefault(assetSymbol, BigDecimal.ZERO);
         if (balance.compareTo(amount) < 0) {
@@ -83,10 +80,9 @@ public class Wallet {
     }
 
     /**
-     * Освобождение зарезервированных средств (возврат в доступный баланс).
-     * Используется при отмене ордера или после частичного исполнения.
+     * Освобождение зарезервированных средств.
      */
-    public synchronized void unreserve(String assetSymbol, BigDecimal amount) {
+    public void unreserve(String assetSymbol, BigDecimal amount) {
         validateAmount(amount);
         BigDecimal reservedAmount = reserved.getOrDefault(assetSymbol, BigDecimal.ZERO);
         if (reservedAmount.compareTo(amount) < 0) {
@@ -98,9 +94,9 @@ public class Wallet {
     }
 
     /**
-     * Списывание зарезервированных средств (после исполнения сделки).
+     * Списывание зарезервированных средств.
      */
-    public synchronized void deductReserved(String assetSymbol, BigDecimal amount) {
+    public void deductReserved(String assetSymbol, BigDecimal amount) {
         validateAmount(amount);
         BigDecimal reservedAmount = reserved.getOrDefault(assetSymbol, BigDecimal.ZERO);
         if (reservedAmount.compareTo(amount) < 0) {

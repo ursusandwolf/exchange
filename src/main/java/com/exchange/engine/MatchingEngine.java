@@ -25,26 +25,34 @@ public class MatchingEngine {
     
     /**
      * Вычисляет сделки для входящего ордера.
-     * НЕ изменяет состояние стакана.
+     * НЕ изменяет состояние стакана и НЕ изменяет состояние ордеров напрямую.
      */
     public MatchResult match(OrderBook orderBook, Order incomingOrder) {
         List<Trade> trades = new ArrayList<>();
         List<Order> ordersToRemove = new ArrayList<>();
         
-        // Клонируем входящий ордер для расчетов (чтобы не менять оригинал раньше времени)
-        // Но в этой реализации мы будем аккуратно менять оригинал, 
-        // так как он еще не в стакане.
+        // Создаем копии для расчетов, чтобы не менять оригиналы в памяти до коммита
+        BigDecimal remainingQty = incomingOrder.getRemainingQuantity();
         
-        while (incomingOrder.isActive() && orderBook.hasMatchingOrders(incomingOrder)) {
+        while (remainingQty.compareTo(BigDecimal.ZERO) > 0 && orderBook.hasMatchingOrders(incomingOrder)) {
             Order contraOrder = getContraOrder(orderBook, incomingOrder, ordersToRemove);
             if (contraOrder == null || !contraOrder.isActive()) {
                 break;
             }
             
-            Trade trade = calculateTrade(incomingOrder, contraOrder);
+            // Нам нужно знать, сколько УЖЕ заполнено в этом цикле для contraOrder
+            BigDecimal contraRemainingQty = contraOrder.getRemainingQuantity();
+            
+            Trade trade = calculateTrade(incomingOrder, contraOrder, remainingQty, contraRemainingQty);
             if (trade != null) {
                 trades.add(trade);
-                if (!contraOrder.isActive()) {
+                remainingQty = remainingQty.subtract(trade.getQuantity());
+                
+                // Если contraOrder полностью заполнен в результате этой сделки (или серии сделок в этом цикле)
+                // На самом деле нам нужно отслеживать суммарное заполнение contraOrder в этом цикле, 
+                // но так как мы берем новый contraOrder каждый раз, или тот же если он не заполнен...
+                // В этой простой реализации contraOrder заполняется за один раз или становится полностью заполненным.
+                if (trade.getQuantity().compareTo(contraRemainingQty) >= 0) {
                     ordersToRemove.add(contraOrder);
                 }
             } else {
@@ -52,13 +60,10 @@ public class MatchingEngine {
             }
         }
         
-        Order remainingOrder = incomingOrder.isActive() ? incomingOrder : null;
-        
-        return new MatchResult(trades, ordersToRemove, remainingOrder);
+        return new MatchResult(trades, ordersToRemove, remainingQty.compareTo(BigDecimal.ZERO) > 0 ? incomingOrder : null);
     }
 
     private Order getContraOrder(OrderBook orderBook, Order incomingOrder, List<Order> alreadyRemoved) {
-        // Нам нужно пропустить те, что мы уже пометили на удаление в этом цикле
         if (incomingOrder.getSide() == Side.BUY) {
             return orderBook.getBestAskOrderExcluding(alreadyRemoved);
         } else {
@@ -66,20 +71,20 @@ public class MatchingEngine {
         }
     }
 
-    private Trade calculateTrade(Order incomingOrder, Order contraOrder) {
+    private Trade calculateTrade(Order incomingOrder, Order contraOrder, BigDecimal incomingRemaining, BigDecimal contraRemaining) {
         BigDecimal tradePrice = determineTradePrice(incomingOrder, contraOrder);
         
         // Slippage Protection check
         if (incomingOrder.getType() == OrderType.MARKET && incomingOrder.getPriceLimit() != null) {
             if (incomingOrder.getSide() == Side.BUY && tradePrice.compareTo(incomingOrder.getPriceLimit()) > 0) {
-                return null; // Price too high for buyer
+                return null;
             }
             if (incomingOrder.getSide() == Side.SELL && tradePrice.compareTo(incomingOrder.getPriceLimit()) < 0) {
-                return null; // Price too low for seller
+                return null;
             }
         }
 
-        BigDecimal tradeQuantity = incomingOrder.getRemainingQuantity().min(contraOrder.getRemainingQuantity());
+        BigDecimal tradeQuantity = incomingRemaining.min(contraRemaining);
         
         if (tradeQuantity.compareTo(BigDecimal.ZERO) <= 0) {
             return null;
@@ -96,14 +101,8 @@ public class MatchingEngine {
                 ? feeService.calculateTakerFee(totalAmount) 
                 : feeService.calculateMakerFee(totalAmount);
 
-        Trade trade = new Trade(buyOrder, sellOrder, tradePrice, tradeQuantity, 
+        return new Trade(buyOrder, sellOrder, tradePrice, tradeQuantity, 
                                 buyerFee, sellerFee, incomingOrder.getId(), contraOrder.getId());
-        
-        // Обновляем количество (пока в памяти объекта Order)
-        incomingOrder.addFilledQuantity(tradeQuantity);
-        contraOrder.addFilledQuantity(tradeQuantity);
-        
-        return trade;
     }
 
     private BigDecimal determineTradePrice(Order order, Order contraOrder) {

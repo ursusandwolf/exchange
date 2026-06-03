@@ -8,6 +8,8 @@ import { RegisterPage } from '../pages/RegisterPage';
 import { useAuthStore } from '../entities/user/model/authStore';
 import { setupResponseInterceptors } from '../shared/api/base';
 
+import { Toaster } from 'sonner';
+
 const queryClient = new QueryClient();
 
 // Initialize API interceptors with logout callback to avoid circular dependency
@@ -16,6 +18,7 @@ setupResponseInterceptors(() => useAuthStore.getState().logout());
 export const App: React.FC = () => {
   return (
     <QueryClientProvider client={queryClient}>
+      <Toaster position="top-right" richColors />
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />

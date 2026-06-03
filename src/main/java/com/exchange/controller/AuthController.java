@@ -4,12 +4,13 @@ import com.exchange.dto.AuthResponse;
 import com.exchange.dto.LoginRequest;
 import com.exchange.dto.RegisterRequest;
 import com.exchange.model.User;
-import com.exchange.repository.UserRepository;
-import com.exchange.service.ExchangeService;
+import com.exchange.service.AccountService;
 import com.exchange.service.JwtService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -21,26 +22,26 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class AuthController {
 
-    private final ExchangeService exchangeService;
-    private final UserRepository userRepository;
+    private final AccountService accountService;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final AuthenticationManager authenticationManager;
 
     @PostMapping("/register")
     public ResponseEntity<AuthResponse> register(@RequestBody @Valid RegisterRequest request) {
-        User user = exchangeService.registerUser(request.username(), request.password());
+        User user = accountService.registerUser(request.username(), request.password());
         String token = jwtService.generateToken(user.getUsername());
         return ResponseEntity.ok(new AuthResponse(token, user.getUsername(), user.getId()));
     }
 
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@RequestBody @Valid LoginRequest request) {
-        User user = userRepository.findByUsername(request.username())
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+        authenticationManager.authenticate(
+            new UsernamePasswordAuthenticationToken(request.username(), request.password())
+        );
         
-        if (!passwordEncoder.matches(request.password(), user.getPassword())) {
-            throw new IllegalArgumentException("Invalid password");
-        }
+        User user = accountService.findByUsername(request.username())
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
         
         String token = jwtService.generateToken(user.getUsername());
         return ResponseEntity.ok(new AuthResponse(token, user.getUsername(), user.getId()));

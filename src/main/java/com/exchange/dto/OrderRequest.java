@@ -1,5 +1,6 @@
 package com.exchange.dto;
 
+import com.exchange.enums.OrderType;
 import com.exchange.enums.Side;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -16,6 +17,9 @@ public record OrderRequest(
     @NotNull(message = "Side (BUY/SELL) is required")
     Side side,
 
+    @NotNull(message = "Order type is required")
+    OrderType type,
+
     @NotNull(message = "Quantity is required")
     @Positive(message = "Quantity must be positive")
     BigDecimal quantity,
@@ -24,5 +28,8 @@ public record OrderRequest(
     BigDecimal price,
 
     @Positive(message = "Price limit must be positive")
-    BigDecimal priceLimit
+    BigDecimal priceLimit,
+
+    @Positive(message = "Trigger price must be positive")
+    BigDecimal triggerPrice
 ) {}
