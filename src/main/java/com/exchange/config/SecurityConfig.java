@@ -52,6 +52,9 @@ public class SecurityConfig {
             .csrf(AbstractHttpConfigurer::disable)
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/**").permitAll()
+                .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                .requestMatchers("/api/user/**").hasAnyRole("USER", "ADMIN")
+                .requestMatchers("/api/orders/**").hasAnyRole("USER", "ADMIN")
                 .requestMatchers("/api/tradingview/**").permitAll()
                 .requestMatchers("/h2-console/**").permitAll()
                 .requestMatchers("/ws-exchange/**").permitAll()

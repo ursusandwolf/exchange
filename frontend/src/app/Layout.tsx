@@ -1,11 +1,19 @@
 import React from 'react';
 import { useAuthStore } from '../entities/user';
 import { Outlet, Link } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 
 export const Layout: React.FC = () => {
   const token = useAuthStore((state) => state.token);
   const username = useAuthStore((state) => state.username);
+  const admin = useAuthStore((state) => state.admin);
   const logout = useAuthStore((state) => state.logout);
+  const queryClient = useQueryClient();
+
+  const handleLogout = () => {
+    queryClient.clear();
+    logout();
+  };
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -15,8 +23,16 @@ export const Layout: React.FC = () => {
           {token ? (
             <>
               <span className="text-muted-foreground">{username}</span>
+              {admin && (
+                <Link to="/admin" className="text-sm font-medium hover:text-primary">
+                  Admin
+                </Link>
+              )}
+              <Link to="/change-password" className="text-sm font-medium hover:text-primary">
+                Change password
+              </Link>
               <button
-                onClick={logout}
+                onClick={handleLogout}
                 className="px-3 py-1 text-sm border rounded hover:bg-accent transition-colors"
               >
                 Logout

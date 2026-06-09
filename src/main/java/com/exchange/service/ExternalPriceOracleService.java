@@ -1,13 +1,14 @@
 package com.exchange.service;
 
-import lombok.Data;
+import com.exchange.client.MarketDataQuoteClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -16,23 +17,24 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 public class ExternalPriceOracleService {
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final MarketDataQuoteClient marketDataQuoteClient;
     private final Map<String, BigDecimal> externalPrices = new ConcurrentHashMap<>();
 
-    // URL для получения цены BTC/USDT с Binance (публичный API)
-    private static final String BINANCE_TICKER_URL = "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT";
+    @Value("${app.market-data.symbols:BTC/USDT}")
+    private String symbolsConfig;
 
     @Scheduled(fixedRate = 5000) // Обновляем каждые 5 секунд
     public void fetchPrices() {
-        try {
-            BinancePriceResponse response = restTemplate.getForObject(BINANCE_TICKER_URL, BinancePriceResponse.class);
-            if (response != null && response.getPrice() != null) {
-                BigDecimal price = new BigDecimal(response.getPrice());
-                externalPrices.put("BTC/USDT", price);
-                log.debug("Fetched external price for BTC/USDT: {}", price);
+        for (String symbol : configuredSymbols()) {
+            try {
+                BigDecimal price = marketDataQuoteClient.fetchPrice(symbol);
+                if (price != null) {
+                    externalPrices.put(symbol, price);
+                    log.debug("Fetched external price for {}", symbol);
+                }
+            } catch (Exception e) {
+                log.error("Failed to fetch external price for {}: {}", symbol, e.getMessage());
             }
-        } catch (Exception e) {
-            log.error("Failed to fetch external price: {}", e.getMessage());
         }
     }
 
@@ -40,9 +42,10 @@ public class ExternalPriceOracleService {
         return externalPrices.get(symbol);
     }
 
-    @Data
-    private static class BinancePriceResponse {
-        private String symbol;
-        private String price;
+    private java.util.List<String> configuredSymbols() {
+        return Arrays.stream(symbolsConfig.split(","))
+                .map(String::trim)
+                .filter(symbol -> !symbol.isBlank())
+                .toList();
     }
 }

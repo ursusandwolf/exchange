@@ -3,25 +3,28 @@ package com.exchange.service;
 import com.alex.fin.core.domain.common.CurrencyCode;
 import com.alex.fin.core.domain.common.Price;
 import com.alex.fin.core.domain.common.Quantity;
+import com.exchange.dto.CandleResponse;
 import com.exchange.dto.OrderBookUpdate;
 import com.exchange.dto.TradeResponse;
 import com.exchange.engine.OrderBook;
-import com.exchange.model.Order;
+import com.exchange.mapper.CandleMapper;
+import com.exchange.mapper.TradeMapper;
+import com.exchange.model.Candle;
 import com.exchange.model.Trade;
+import com.exchange.repository.CandleRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.stream.Collectors;
-
-import com.exchange.repository.CandleRepository;
-import com.exchange.model.Candle;
-import org.springframework.transaction.annotation.Transactional;
-import java.time.temporal.ChronoUnit;
-import java.time.LocalDateTime;
 
 @Service
 @RequiredArgsConstructor
@@ -30,6 +33,8 @@ public class MarketDataService {
 
     private final SimpMessagingTemplate messagingTemplate;
     private final CandleRepository candleRepository;
+    private final CandleMapper candleMapper;
+    private final TradeMapper tradeMapper;
 
     public void broadcastOrderBookUpdate(OrderBook orderBook) {
         OrderBookUpdate update = OrderBookUpdate.builder()
@@ -43,27 +48,19 @@ public class MarketDataService {
 
     @Transactional
     public void broadcastTrade(Trade trade) {
-        TradeResponse response = new TradeResponse(
-                trade.getId(),
-                trade.getBuyOrder().getId(),
-                trade.getSellOrder().getId(),
-                trade.getPrice().value(),
-                trade.getQuantity().value(),
-                trade.getTotalAmount(),
-                java.time.LocalDateTime.ofInstant(trade.getTimestamp(), java.time.ZoneOffset.UTC)
-        );
+        TradeResponse response = tradeMapper.toResponse(trade);
 
         String symbol = trade.getBuyOrder().getSymbol();
         messagingTemplate.convertAndSend("/topic/trades/" + symbol, response);
         
-        updateCandles(symbol, trade.getPrice(), trade.getQuantity(), response.timestamp());
+        updateCandles(symbol, trade.getPrice(), trade.getQuantity(), trade.getTimestamp());
     }
 
-    private void updateCandles(String symbol, Price price, Quantity quantity, LocalDateTime timestamp) {
+    private void updateCandles(String symbol, Price price, Quantity quantity, Instant timestamp) {
         // 1m candles
-        LocalDateTime openTime = timestamp.truncatedTo(ChronoUnit.MINUTES);
+        LocalDateTime openTime = LocalDateTime.ofInstant(timestamp, ZoneOffset.UTC).truncatedTo(ChronoUnit.MINUTES);
         String interval = "1m";
-        
+
         Candle candle = candleRepository.findBySymbolAndIntervalAndOpenTime(symbol, interval, openTime)
                 .orElseGet(() -> Candle.builder()
                         .symbol(symbol)
@@ -75,12 +72,13 @@ public class MarketDataService {
                         .close(price)
                         .volume(new Quantity(BigDecimal.ZERO))
                         .build());
-        
+
         candle.update(price, quantity);
         candleRepository.save(candle);
-        
+
         // Broadcast candle update
-        messagingTemplate.convertAndSend("/topic/candles/" + symbol + "/" + interval, candle);
+        CandleResponse response = candleMapper.toResponse(candle);
+        messagingTemplate.convertAndSend("/topic/candles/" + symbol + "/" + interval, response);
     }
 
     private List<OrderBookUpdate.PriceLevel> convertPriceLevels(java.util.Map<BigDecimal, BigDecimal> levels) {

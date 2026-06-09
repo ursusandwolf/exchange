@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { createChart, type ISeriesApi, CandlestickSeries } from 'lightweight-charts';
+import { createChart, CandlestickSeries, type ISeriesApi, type UTCTimestamp } from 'lightweight-charts';
 import { api } from '../shared/api';
 import { Client } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
@@ -10,7 +10,7 @@ interface ChartProps {
 
 export const Chart: React.FC<ChartProps> = ({ symbol }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
-  const seriesRef = useRef<ISeriesApi<'Candlestick'>>();
+  const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -84,10 +84,8 @@ export const Chart: React.FC<ChartProps> = ({ symbol }) => {
       onConnect: () => {
         stompClient.subscribe(`/topic/candles/${symbol}/1m`, (message) => {
           const candle = JSON.parse(message.body);
-          // Lightweight-charts expects time in seconds for Unix timestamp
-          const timestamp = Math.floor(new Date(candle.openTime).getTime() / 1000);
           candlestickSeries.update({
-            time: timestamp,
+            time: candle.openTime as UTCTimestamp,
             open: candle.open,
             high: candle.high,
             low: candle.low,

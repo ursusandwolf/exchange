@@ -3,6 +3,7 @@ package com.exchange.controller;
 import com.exchange.dto.tradingview.TvConfigResponse;
 import com.exchange.dto.tradingview.TvHistoryResponse;
 import com.exchange.dto.tradingview.TvSymbolResponse;
+import com.exchange.mapper.CandleMapper;
 import com.exchange.model.Candle;
 import com.exchange.repository.CandleRepository;
 import lombok.RequiredArgsConstructor;
@@ -13,7 +14,6 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -26,6 +26,7 @@ import java.util.List;
 public class TradingViewController {
 
     private final CandleRepository candleRepository;
+    private final CandleMapper candleMapper;
 
     @GetMapping("/config")
     public TvConfigResponse getConfig() {
@@ -65,36 +66,7 @@ public class TradingViewController {
         List<Candle> candles = candleRepository.findBySymbolAndIntervalAndOpenTimeBetweenOrderByOpenTimeAsc(
                 symbol, interval, startTime, endTime
         );
-
-        if (candles.isEmpty()) {
-            return TvHistoryResponse.noData();
-        }
-
-        List<Long> t = new ArrayList<>();
-        List<BigDecimal> o = new ArrayList<>();
-        List<BigDecimal> h = new ArrayList<>();
-        List<BigDecimal> l = new ArrayList<>();
-        List<BigDecimal> c = new ArrayList<>();
-        List<BigDecimal> v = new ArrayList<>();
-
-        for (Candle candle : candles) {
-            t.add(candle.getOpenTime().toInstant(ZoneOffset.UTC).getEpochSecond());
-            o.add(candle.getOpen().value());
-            h.add(candle.getHigh().value());
-            l.add(candle.getLow().value());
-            c.add(candle.getClose().value());
-            v.add(candle.getVolume().value());
-        }
-
-        return TvHistoryResponse.builder()
-                .status("ok")
-                .timestamps(t)
-                .open(o)
-                .high(h)
-                .low(l)
-                .close(c)
-                .volume(v)
-                .build();
+        return candleMapper.toHistoryResponse(candles);
     }
 
     private String mapResolution(String resolution) {

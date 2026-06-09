@@ -4,6 +4,8 @@ import com.alex.fin.core.domain.common.InstrumentId;
 import com.alex.fin.core.domain.common.Price;
 import com.alex.fin.core.domain.common.Quantity;
 import com.alex.fin.core.domain.common.CurrencyCode;
+import com.exchange.dto.OcoOrderRequest;
+import com.exchange.dto.OcoOrderResponse;
 import com.exchange.dto.OrderRequest;
 import com.exchange.engine.MatchResult;
 import com.exchange.engine.MatchingEngine;
@@ -28,9 +30,11 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -87,6 +91,68 @@ public class OrderService {
                                        request.side(), request.type(), quantity, 
                                        price, priceLimit)
             );
+        }
+    }
+
+    public OcoOrderResponse submitOcoOrder(User user, OcoOrderRequest request) {
+        if (request.side() != Side.SELL) {
+            throw new IllegalArgumentException("OCO orders currently support SELL side only");
+        }
+        if (request.takeProfitPrice().compareTo(request.stopLossTriggerPrice()) <= 0) {
+            throw new IllegalArgumentException("Take profit price must be above stop loss trigger price for OCO SELL orders");
+        }
+
+        String symbol = request.baseAsset() + "/" + request.quoteAsset();
+        Object lock = locks.computeIfAbsent(symbol, k -> new Object());
+
+        synchronized (lock) {
+            return transactionTemplate.execute(status -> {
+                InstrumentId baseId = new InstrumentId(request.baseAsset());
+                InstrumentId quoteId = new InstrumentId(request.quoteAsset());
+                CurrencyCode quoteCurrency = new CurrencyCode(request.quoteAsset());
+                Quantity quantity = new Quantity(request.quantity());
+                String groupId = UUID.randomUUID().toString();
+
+                walletService.reserve(
+                        user.getId(),
+                        request.baseAsset(),
+                        request.quantity(),
+                        "Reserve for OCO group " + groupId
+                );
+
+                Order takeProfitOrder = Order.triggerOrder(
+                        user.getId(),
+                        baseId,
+                        quoteId,
+                        Side.SELL,
+                        OrderType.TAKE_PROFIT,
+                        quantity,
+                        new Price(request.takeProfitPrice(), quoteCurrency),
+                        new Price(request.takeProfitPrice(), quoteCurrency)
+                );
+                takeProfitOrder.linkOcoGroup(groupId);
+
+                Order stopLossOrder = Order.triggerOrder(
+                        user.getId(),
+                        baseId,
+                        quoteId,
+                        Side.SELL,
+                        OrderType.STOP_LOSS,
+                        quantity,
+                        request.stopLossPrice() != null ? new Price(request.stopLossPrice(), quoteCurrency) : null,
+                        new Price(request.stopLossTriggerPrice(), quoteCurrency)
+                );
+                stopLossOrder.linkOcoGroup(groupId);
+
+                orderRepository.save(takeProfitOrder);
+                orderRepository.save(stopLossOrder);
+
+                matchingManager.addTriggeredOrder(takeProfitOrder);
+                matchingManager.addTriggeredOrder(stopLossOrder);
+
+                log.info("OCO group {} placed for user {}", groupId, user.getUsername());
+                return new OcoOrderResponse(groupId, List.of(takeProfitOrder.getId(), stopLossOrder.getId()));
+            });
         }
     }
 
@@ -179,11 +245,19 @@ public class OrderService {
                                                       triggerOrder.getQuoteAsset(), triggerOrder.getSide(), 
                                                       new Quantity(triggerOrder.getRemainingQuantity()), null);
                 }
+
+                if (triggerOrder.getOcoGroupId() != null) {
+                    executableOrder.linkOcoGroup(triggerOrder.getOcoGroupId());
+                }
                 
                 triggerOrder.addFilledQuantity(triggerOrder.getRemainingQuantity()); // Mark as done
                 orderRepository.save(triggerOrder);
                 
                 orderRepository.save(executableOrder);
+
+                if (triggerOrder.getOcoGroupId() != null) {
+                    cancelOcoGroupOrders(triggerOrder.getUserId(), triggerOrder.getOcoGroupId(), triggerOrder.getId(), executableOrder.getId());
+                }
                 
                 MatchResult result = matchingEngine.match(orderBook, executableOrder);
                 for (Trade trade : result.getTrades()) {
@@ -201,6 +275,42 @@ public class OrderService {
                 return null;
             });
         }
+    }
+
+    private boolean cancelOcoGroupOrders(String userId, String ocoGroupId, String... excludedOrderIds) {
+        if (ocoGroupId == null) {
+            return false;
+        }
+
+        HashSet<String> excluded = new HashSet<>(List.of(excludedOrderIds));
+        List<Order> siblings = orderRepository.findByOcoGroupId(ocoGroupId);
+        boolean activated = siblings.stream().anyMatch(order ->
+                order.getType() == OrderType.LIMIT || order.getType() == OrderType.MARKET
+        );
+
+        for (Order sibling : siblings) {
+            if (excluded.contains(sibling.getId()) || !sibling.isActive()) {
+                continue;
+            }
+
+            if (sibling.getType() == OrderType.LIMIT || sibling.getType() == OrderType.MARKET) {
+                OrderBook orderBook = matchingManager.getOrderBookBySymbol(sibling.getSymbol());
+                if (orderBook != null) {
+                    orderBook.removeOrder(sibling);
+                }
+                releaseUnusedReserve(userId, sibling);
+            } else {
+                matchingManager.removeTriggeredOrder(sibling.getId());
+                if (activated) {
+                    // OCO reserve is released only once on the executable leg.
+                }
+            }
+
+            sibling.cancel();
+            orderRepository.save(sibling);
+        }
+
+        return activated;
     }
 
     private void updateOrderStates(MatchResult result) {
@@ -300,16 +410,33 @@ public class OrderService {
         Order order = orderRepository.findById(orderId).orElseThrow();
         if (!order.getUserId().equals(userId) || !order.isActive()) return false;
 
+        if (order.getOcoGroupId() != null) {
+            boolean activated = cancelOcoGroupOrders(userId, order.getOcoGroupId());
+            if (!activated) {
+                walletService.unreserve(
+                        userId,
+                        order.getBaseAsset().value(),
+                        order.getQuantity().value(),
+                        "Release OCO reserve for group " + order.getOcoGroupId()
+                );
+            }
+            return true;
+        }
+
         order.cancel();
         releaseUnusedReserve(userId, order);
-        
+
+        if (order.getType() == OrderType.STOP_LOSS || order.getType() == OrderType.TAKE_PROFIT) {
+            matchingManager.removeTriggeredOrder(order.getId());
+        } else {
+            OrderBook orderBook = matchingManager.getOrderBookBySymbol(order.getSymbol());
+            if (orderBook != null) {
+                orderBook.removeOrder(order);
+            }
+        }
+
         orderRepository.save(order);
-        
-        // If it was a triggered order, remove from memory
-        // (MatchingManager.init would recover it if we didn't remove, but cancel marks it in DB)
-        // For simplicity, we just let it be marked as CANCELLED in DB. 
-        // MatchingManager.getAndRemoveTriggeredOrders should skip non-active orders if we wanted to be more robust.
-        
+
         return true;
     }
 

@@ -1,6 +1,8 @@
 package com.exchange.exception;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -31,5 +33,20 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<String> handleIllegalStateException(IllegalStateException ex) {
         return ResponseEntity.internalServerError().body("Internal Server Error: " + ex.getMessage());
+    }
+
+    @ExceptionHandler(BadCredentialsException.class)
+    public ResponseEntity<String> handleBadCredentialsException(BadCredentialsException ex) {
+        return ResponseEntity.status(401).body("Invalid username or password");
+    }
+
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<String> handleAuthenticationException(AuthenticationException ex) {
+        return ResponseEntity.status(401).body("Unauthorized");
+    }
+
+    @ExceptionHandler(TooManyRequestsException.class)
+    public ResponseEntity<String> handleTooManyRequestsException(TooManyRequestsException ex) {
+        return ResponseEntity.status(429).body(ex.getMessage());
     }
 }

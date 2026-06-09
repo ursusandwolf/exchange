@@ -31,9 +31,13 @@ public class Candle {
     private String interval; // e.g., "1m"
     private LocalDateTime openTime;
     
+    @jakarta.persistence.Column(length = 96)
     private Price open;
+    @jakarta.persistence.Column(length = 96)
     private Price high;
+    @jakarta.persistence.Column(length = 96)
     private Price low;
+    @jakarta.persistence.Column(length = 96)
     private Price close;
     private Quantity volume;
 

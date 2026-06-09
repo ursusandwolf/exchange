@@ -22,7 +22,7 @@ import java.math.BigDecimal;
 @Component
 @RequiredArgsConstructor
 @Slf4j
-@Profile("!test")
+@Profile("demo")
 public class MarketDataInitializer implements CommandLineRunner {
 
     private final AccountService accountService;
@@ -37,7 +37,9 @@ public class MarketDataInitializer implements CommandLineRunner {
         User maker1 = accountService.registerUser("maker_low", "password123");
         User maker2 = accountService.registerUser("maker_high", "password123");
 
-        // Пополняем им балансы
+        // Пополняем им стартовые балансы отдельно от самой регистрации
+        accountService.seedDemoBalances(maker1.getId());
+        accountService.seedDemoBalances(maker2.getId());
         walletService.deposit(maker1.getId(), "BTC", new BigDecimal("10"));
         walletService.deposit(maker1.getId(), "USDT", new BigDecimal("1000000"));
         walletService.deposit(maker2.getId(), "BTC", new BigDecimal("10"));

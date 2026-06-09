@@ -48,6 +48,6 @@
 ## 🚀 Будущее (Phase 5: External Integrations)
 - [x] **Price Oracle**: Получение реальных цен с Binance API.
 - [x] **Arbitrage Bots**: Демонстрационный бот, торгующий на разнице цен Oracle и биржи.
-- [ ] **Advanced Matching**: Поддержка Stop-Loss и Take-Profit ордеров.
-- [ ] **Admin Panel**: Управление пользователями и мониторинг профита биржи.
-
+- [x] **Advanced Matching**: Поддержка Stop-Loss и Take-Profit ордеров.
+- [x] **Admin Panel**: Управление пользователями и мониторинг профита биржи.
+- [x] **Password Reset**: Полноценный reset flow по email с одноразовым токеном, сроком жизни и отзывом сессий.

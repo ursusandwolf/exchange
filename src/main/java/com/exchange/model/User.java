@@ -15,7 +15,7 @@ import java.util.UUID;
 @Entity
 @Table(name = "users")
 @Getter
-@ToString
+@ToString(exclude = "password")
 @NoArgsConstructor
 public class User {
     @Id
@@ -24,8 +24,14 @@ public class User {
     @Column(unique = true, nullable = false)
     private String username;
 
+    @Column(unique = true, nullable = false)
+    private String email;
+
     @Column(nullable = false)
     private String password;
+
+    @Column(nullable = false)
+    private boolean admin;
 
     @OneToOne(cascade = CascadeType.ALL, fetch = FetchType.EAGER)
     @JoinColumn(name = "wallet_id", referencedColumnName = "ownerId")
@@ -34,11 +40,37 @@ public class User {
     @Version
     private Long version;
 
+    @Column(nullable = false)
+    private int tokenVersion;
+
     public User(String username, String password) {
+        this(username, password, false, username + "@exchange.local");
+    }
+
+    public User(String username, String password, boolean admin) {
+        this(username, password, admin, username + "@exchange.local");
+    }
+
+    public User(String username, String password, boolean admin, String email) {
         this.id = UUID.randomUUID().toString();
         this.username = username;
+        this.email = email;
         this.password = password;
+        this.admin = admin;
         this.wallet = new Wallet(this.id);
+        this.tokenVersion = 0;
+    }
+
+    public void changePassword(String encodedPassword) {
+        this.password = encodedPassword;
+    }
+
+    public void setAdmin(boolean admin) {
+        this.admin = admin;
+    }
+
+    public void incrementTokenVersion() {
+        this.tokenVersion++;
     }
 
     /**

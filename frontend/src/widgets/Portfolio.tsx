@@ -2,23 +2,23 @@ import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../entities/user';
 import { api } from '../shared/api';
-import { format } from 'date-fns';
 
 export const Portfolio: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'assets' | 'history'>('assets');
   const token = useAuthStore(state => state.token);
+  const userId = useAuthStore(state => state.userId);
 
   const { data: portfolio, isLoading: isPortfolioLoading } = useQuery({
-    queryKey: ['portfolio'],
+    queryKey: ['portfolio', userId],
     queryFn: () => api.get('/user/portfolio').then(res => res.data),
-    enabled: !!token,
+    enabled: !!token && !!userId,
     refetchInterval: 5000,
   });
 
   const { data: history, isLoading: isHistoryLoading } = useQuery({
-    queryKey: ['wallet-history'],
+    queryKey: ['wallet-history', userId],
     queryFn: () => api.get('/user/history').then(res => res.data),
-    enabled: !!token && activeTab === 'history',
+    enabled: !!token && !!userId && activeTab === 'history',
   });
 
   if (!token) {
@@ -109,7 +109,7 @@ const HistoryView: React.FC<{ data: any[]; isLoading: boolean }> = ({ data, isLo
               {record.amount > 0 ? '+' : ''}{record.amount.toFixed(4)}
             </span>
             <span className="text-right text-muted-foreground px-1">
-               {record.timestamp ? format(new Date(record.timestamp), 'HH:mm:ss') : 'N/A'}
+               {record.timestamp ? new Date(record.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'N/A'}
             </span>
           </div>
         ))}

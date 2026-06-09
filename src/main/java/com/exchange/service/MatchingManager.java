@@ -45,12 +45,19 @@ public class MatchingManager {
         triggeredOrders.computeIfAbsent(order.getSymbol(), k -> new java.util.concurrent.CopyOnWriteArrayList<>()).add(order);
     }
 
+    public void removeTriggeredOrder(String orderId) {
+        triggeredOrders.values().forEach(list -> list.removeIf(order -> order.getId().equals(orderId)));
+    }
+
     public List<Order> getAndRemoveTriggeredOrders(String symbol, BigDecimal lastPrice) {
         List<Order> triggered = triggeredOrders.get(symbol);
         if (triggered == null || triggered.isEmpty()) return List.of();
 
         List<Order> toActivate = new java.util.ArrayList<>();
         triggered.removeIf(order -> {
+            if (!order.isActive()) {
+                return true;
+            }
             boolean shouldTrigger = false;
             if (order.getType() == com.exchange.enums.OrderType.STOP_LOSS) {
                 // Stop Loss: trigger when price goes BELOW (for sell) or ABOVE (for buy) triggerPrice?
@@ -71,6 +78,13 @@ public class MatchingManager {
             return false;
         });
         return toActivate;
+    }
+
+    public List<Order> findTriggeredOrdersByGroupId(String ocoGroupId) {
+        return triggeredOrders.values().stream()
+                .flatMap(List::stream)
+                .filter(order -> ocoGroupId.equals(order.getOcoGroupId()))
+                .toList();
     }
 
     public OrderBook getOrderBook(String baseAsset, String quoteAsset) {

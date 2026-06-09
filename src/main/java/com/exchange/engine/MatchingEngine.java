@@ -63,10 +63,18 @@ public class MatchingEngine {
     }
 
     private Order getContraOrder(OrderBook orderBook, Order incomingOrder, List<Order> alreadyRemoved) {
-        if (incomingOrder.getSide() == Side.BUY) {
-            return orderBook.getBestAskOrderExcluding(alreadyRemoved);
-        } else {
-            return orderBook.getBestBidOrderExcluding(alreadyRemoved);
+        while (true) {
+            Order candidate = incomingOrder.getSide() == Side.BUY
+                    ? orderBook.getBestAskOrderExcluding(alreadyRemoved)
+                    : orderBook.getBestBidOrderExcluding(alreadyRemoved);
+
+            if (candidate == null) {
+                return null;
+            }
+            if (candidate.isActive()) {
+                return candidate;
+            }
+            alreadyRemoved.add(candidate);
         }
     }
 

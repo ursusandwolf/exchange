@@ -30,7 +30,3 @@ A fully functional simulation of a Centralized Exchange (CEX) with a modern Java
 - Added full audit logging for all wallet operations.
 
 ## Pending Items
-- [ ] Support for OCO (One-Cancels-the-Other) orders.
-- [ ] User Roles (ADMIN vs USER) for stricter API protection.
-- [ ] Improved Admin UI for user management.
-- [ ] Unit tests for `MatchingEngine` algorithmic edge cases.

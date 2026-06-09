@@ -1,7 +1,9 @@
 package com.exchange.controller;
 
-import com.exchange.model.Candle;
+import com.exchange.dto.CandleResponse;
+import com.exchange.mapper.CandleMapper;
 import com.exchange.repository.CandleRepository;
+import com.exchange.service.ExternalPriceOracleService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -9,10 +11,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
-
-import com.exchange.service.ExternalPriceOracleService;
 import java.math.BigDecimal;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/market")
@@ -20,6 +20,7 @@ import java.math.BigDecimal;
 public class MarketDataController {
 
     private final CandleRepository candleRepository;
+    private final CandleMapper candleMapper;
     private final ExternalPriceOracleService oracleService;
 
     @GetMapping("/oracle/{symbol}")
@@ -29,11 +30,12 @@ public class MarketDataController {
     }
 
     @GetMapping("/candles/{symbol}")
-    public List<Candle> getCandles(
+    public List<CandleResponse> getCandles(
             @PathVariable String symbol,
             @RequestParam(defaultValue = "1m") String interval) {
-        // Заменяем _ на / в символе, если передано в формате BTC_USDT
         String formattedSymbol = symbol.replace("_", "/");
-        return candleRepository.findBySymbolAndIntervalOrderByOpenTimeDesc(formattedSymbol, interval);
+        return candleMapper.toResponseList(
+                candleRepository.findBySymbolAndIntervalOrderByOpenTimeDesc(formattedSymbol, interval)
+        );
     }
 }

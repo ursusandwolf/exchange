@@ -6,6 +6,7 @@ import { useAuthStore } from '../entities/user';
 
 export const RegisterPage: React.FC = () => {
   const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const navigate = useNavigate();
@@ -14,8 +15,8 @@ export const RegisterPage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const response = await api.post('/auth/register', { username, password });
-      setAuth(response.data.token, response.data.username, response.data.userId);
+      const response = await api.post('/auth/register', { username, email, password });
+      setAuth(response.data.token, response.data.username, response.data.userId, response.data.admin);
       navigate('/');
     } catch (err: unknown) {
       if (err instanceof AxiosError) {
@@ -45,6 +46,16 @@ export const RegisterPage: React.FC = () => {
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
+              className="w-full p-2 border rounded bg-background"
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               className="w-full p-2 border rounded bg-background"
               required
             />

@@ -1,11 +1,14 @@
 package com.exchange.controller;
 
+import com.alex.fin.core.domain.common.CurrencyCode;
+import com.alex.fin.core.domain.common.Price;
+import com.alex.fin.core.domain.common.Quantity;
 import com.exchange.dto.tradingview.TvHistoryResponse;
+import com.exchange.mapper.CandleMapper;
 import com.exchange.model.Candle;
 import com.exchange.repository.CandleRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -24,9 +27,6 @@ class TradingViewControllerTest {
     @Mock
     private CandleRepository candleRepository;
 
-    @InjectMocks
-    private TradingViewController tradingViewController;
-
     @Test
     void should_return_history_when_candles_exist() {
         // Given
@@ -36,11 +36,11 @@ class TradingViewControllerTest {
                 .symbol(symbol)
                 .interval("1m")
                 .openTime(now)
-                .open(new BigDecimal("50000"))
-                .high(new BigDecimal("51000"))
-                .low(new BigDecimal("49000"))
-                .close(new BigDecimal("50500"))
-                .volume(new BigDecimal("10"))
+                .open(new Price(new BigDecimal("50000"), new CurrencyCode("USDT")))
+                .high(new Price(new BigDecimal("51000"), new CurrencyCode("USDT")))
+                .low(new Price(new BigDecimal("49000"), new CurrencyCode("USDT")))
+                .close(new Price(new BigDecimal("50500"), new CurrencyCode("USDT")))
+                .volume(new Quantity(new BigDecimal("10")))
                 .build();
 
         given(candleRepository.findBySymbolAndIntervalAndOpenTimeBetweenOrderByOpenTimeAsc(
@@ -48,6 +48,7 @@ class TradingViewControllerTest {
                 .willReturn(List.of(candle));
 
         // When
+        TradingViewController tradingViewController = new TradingViewController(candleRepository, new CandleMapper());
         TvHistoryResponse response = tradingViewController.getHistory(
                 symbol, "1", now.toEpochSecond(ZoneOffset.UTC) - 60, now.toEpochSecond(ZoneOffset.UTC) + 60
         );
@@ -67,6 +68,7 @@ class TradingViewControllerTest {
                 .willReturn(List.of());
 
         // When
+        TradingViewController tradingViewController = new TradingViewController(candleRepository, new CandleMapper());
         TvHistoryResponse response = tradingViewController.getHistory("BTC/USDT", "1", 0, 100);
 
         // Then

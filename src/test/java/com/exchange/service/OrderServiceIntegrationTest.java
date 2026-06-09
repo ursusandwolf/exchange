@@ -38,6 +38,8 @@ class OrderServiceIntegrationTest {
         // 1. Регистрация пользователей
         User alice = accountService.registerUser("Alice_" + System.currentTimeMillis(), "password123");
         User bob = accountService.registerUser("Bob_" + System.currentTimeMillis(), "password123");
+        accountService.seedDemoBalances(alice.getId());
+        accountService.seedDemoBalances(bob.getId());
 
         // 2. Bob выставляет SELL ордер
         OrderRequest sellRequest = new OrderRequest("BTC", "USDT", Side.SELL, OrderType.LIMIT, new BigDecimal("1"), new BigDecimal("45000"), null, null);
@@ -50,7 +52,7 @@ class OrderServiceIntegrationTest {
         // 4. Проверки
         assertThat(trades).hasSize(1);
         Trade trade = trades.get(0);
-        assertThat(trade.getPrice()).isEqualByComparingTo("45000");
+        assertThat(trade.getPrice().value()).isEqualByComparingTo("45000");
         
         // Проверка баланса Alice: было 50000 USDT, потратила 45000 + 45 fee = 45045. Осталось 4955.
         assertThat(walletService.getBalance(alice.getId(), "USDT")).isEqualByComparingTo("4955");

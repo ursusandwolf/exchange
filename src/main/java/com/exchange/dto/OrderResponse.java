@@ -14,6 +14,9 @@ public record OrderResponse(
     OrderType type,
     BigDecimal quantity,
     BigDecimal price,
+    BigDecimal priceLimit,
+    BigDecimal triggerPrice,
+    String ocoGroupId,
     BigDecimal filledQuantity,
     OrderStatus status,
     Instant createdAt

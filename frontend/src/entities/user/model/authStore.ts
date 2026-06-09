@@ -5,7 +5,8 @@ interface AuthState {
   token: string | null;
   username: string | null;
   userId: string | null;
-  setAuth: (token: string, username: string, userId: string) => void;
+  admin: boolean;
+  setAuth: (token: string, username: string, userId: string, admin: boolean) => void;
   logout: () => void;
 }
 
@@ -15,11 +16,12 @@ export const useAuthStore = create<AuthState>()(
       token: null,
       username: null,
       userId: null,
-      setAuth: (token, username, userId) => {
-        set({ token, username, userId });
+      admin: false,
+      setAuth: (token, username, userId, admin) => {
+        set({ token, username, userId, admin });
       },
       logout: () => {
-        set({ token: null, username: null, userId: null });
+        set({ token: null, username: null, userId: null, admin: false });
       },
     }),
     {

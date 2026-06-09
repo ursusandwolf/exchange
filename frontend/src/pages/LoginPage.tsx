@@ -15,7 +15,7 @@ export const LoginPage: React.FC = () => {
     e.preventDefault();
     try {
       const response = await api.post('/auth/login', { username, password });
-      setAuth(response.data.token, response.data.username, response.data.userId);
+      setAuth(response.data.token, response.data.username, response.data.userId, response.data.admin);
       navigate('/');
     } catch (err: unknown) {
       if (err instanceof AxiosError) {
@@ -68,6 +68,9 @@ export const LoginPage: React.FC = () => {
         </form>
         <p className="mt-4 text-center text-sm text-muted-foreground">
           Don't have an account? <span onClick={() => navigate('/register')} className="text-primary cursor-pointer hover:underline">Register</span>
+        </p>
+        <p className="mt-2 text-center text-sm text-muted-foreground">
+          Forgot password? <span onClick={() => navigate('/reset-password')} className="text-primary cursor-pointer hover:underline">Reset it</span>
         </p>
       </div>
     </div>

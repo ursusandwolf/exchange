@@ -30,10 +30,10 @@ public class Order {
     @Column(nullable = false)
     private String userId;
     
-    @Column(nullable = false)
+    @Column(nullable = false, length = 32)
     private InstrumentId baseAsset;      // Например, BTC
-    
-    @Column(nullable = false)
+
+    @Column(nullable = false, length = 32)
     private InstrumentId quoteAsset;     // Например, USDT
     
     @Enumerated(EnumType.STRING)
@@ -47,14 +47,17 @@ public class Order {
     @Column(precision = 24, scale = 8, nullable = false)
     private Quantity quantity;   // Количество базового актива
     
-    @Column(precision = 24, scale = 8)
+    @Column(length = 96)
     private Price price;      // Цена за единицу (null для MARKET ордеров)
-    
-    @Column(precision = 24, scale = 8)
+
+    @Column(length = 96)
     private Price priceLimit; // Лимит проскальзывания для MARKET ордеров
 
-    @Column(precision = 24, scale = 8)
+    @Column(length = 96)
     private Price triggerPrice; // Цена активации для STOP_LOSS / TAKE_PROFIT
+
+    @Column(length = 64)
+    private String ocoGroupId;
     
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -114,10 +117,18 @@ public class Order {
      */
     public static Order triggerOrder(String userId, InstrumentId baseAsset, InstrumentId quoteAsset, 
                                     Side side, OrderType type, Quantity quantity, Price price, Price triggerPrice) {
+        if (type != OrderType.STOP_LOSS && type != OrderType.TAKE_PROFIT) {
+            throw new IllegalArgumentException("Trigger order type must be STOP_LOSS or TAKE_PROFIT");
+        }
         if (triggerPrice == null || triggerPrice.value().compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Trigger price is required");
         }
         return new Order(userId, baseAsset, quoteAsset, side, type, quantity, price, null, triggerPrice);
+    }
+
+    public void linkOcoGroup(String ocoGroupId) {
+        this.ocoGroupId = ocoGroupId;
+        this.updatedAt = Instant.now();
     }
 
     /**

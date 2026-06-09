@@ -1,7 +1,7 @@
 package com.exchange.dto;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 public record TradeResponse(
     String tradeId,
@@ -10,5 +10,5 @@ public record TradeResponse(
     BigDecimal price,
     BigDecimal quantity,
     BigDecimal totalAmount,
-    LocalDateTime timestamp
+    Instant timestamp
 ) {}

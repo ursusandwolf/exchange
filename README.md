@@ -40,6 +40,27 @@ com.exchange/
 - **Order** — заявка с полями: userId, baseAsset, quoteAsset, side, type, quantity, price
 - **Trade** — результат сделки между buy и sell ордерами
 
+### Auth API
+
+- `POST /api/auth/register`
+  - body: `{ "username": "...", "email": "...", "password": "..." }`
+  - создает пользователя и возвращает `AuthResponse`
+- `POST /api/auth/login`
+  - body: `{ "username": "...", "password": "..." }`
+  - возвращает JWT, `username`, `userId` и флаг `admin`
+- `POST /api/auth/password-reset/request`
+  - body: `{ "email": "..." }`
+  - создает одноразовый reset token и отправляет ссылку на email
+- `POST /api/auth/password-reset/confirm`
+  - body: `{ "token": "...", "newPassword": "..." }`
+  - меняет пароль и отзывает старые JWT через `tokenVersion`
+
+### Admin API
+
+- `GET /api/admin/stats` - общая статистика биржи и fee-wallet
+- `GET /api/admin/users` - список пользователей с балансами и ролью
+- `PATCH /api/admin/users/{userId}/admin` - переключение роли admin
+
 ### Движки
 
 - **OrderBook** — стакан заявок для пары типа BTC/USDT
@@ -75,7 +96,17 @@ javac -d target/classes $(find src/main/java -name "*.java")
 ### Запуск демо
 
 ```bash
-java -cp target/classes com.exchange.ExchangeDemo
+SPRING_PROFILES_ACTIVE=demo java -cp target/classes com.exchange.ExchangeDemo
+```
+
+В `demo`-профиле поднимается инициализация стакана и тестовых пользователей. Обычная регистрация через `/api/auth/register` больше не добавляет стартовые активы автоматически.
+
+Для локальной разработки можно задать:
+
+```bash
+export ADMIN_USERNAME=admin
+export ADMIN_PASSWORD=admin123
+export PASSWORD_RESET_FRONTEND_URL=http://localhost:5173
 ```
 
 ## Пример сценария
@@ -136,9 +167,14 @@ for (Trade trade : trades) {
 
 ### Дополнительные возможности
 - TimeInForce (GTC, IOC, FOK) в `Order`
-- Stop-loss / take-profit уровни
 - WebSocket/Kafka уведомления
 - Глобальный реестр ордеров для отмены
+
+### Уже реализовано
+- Stop-loss / take-profit уровни
+- OCO-ордера с автоматической отменой второй leg
+- Admin panel для управления пользователями
+- Password reset по email с одноразовым токеном
 
 ## Архитектурные решения
 

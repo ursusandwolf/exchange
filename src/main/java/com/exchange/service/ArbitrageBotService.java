@@ -7,6 +7,7 @@ import com.exchange.enums.Side;
 import com.exchange.model.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -25,6 +26,8 @@ public class ArbitrageBotService {
 
     private static final String BOT_USERNAME = "arbitrage_bot";
     private static final BigDecimal THRESHOLD_PERCENT = new BigDecimal("0.005"); // 0.5% deviation
+    @Value("${app.arbitrage.symbol:BTC/USDT}")
+    private String symbol;
     private String botUserId;
 
     @jakarta.annotation.PostConstruct
@@ -42,7 +45,6 @@ public class ArbitrageBotService {
 
     @Scheduled(fixedRate = 10000) // Check every 10 seconds
     public void runArbitrage() {
-        String symbol = "BTC/USDT";
         BigDecimal externalPrice = oracleService.getExternalPrice(symbol);
         if (externalPrice == null) return;
 
@@ -78,7 +80,11 @@ public class ArbitrageBotService {
     private void executeTrade(Side side, BigDecimal quantity, BigDecimal price) {
         try {
             User bot = accountService.findById(botUserId).orElseThrow();
-            OrderRequest request = new OrderRequest("BTC", "USDT", side, OrderType.LIMIT, quantity, price, null, null);
+            String[] parts = symbol.split("/", 2);
+            if (parts.length != 2) {
+                throw new IllegalStateException("Invalid arbitrage symbol: " + symbol);
+            }
+            OrderRequest request = new OrderRequest(parts[0], parts[1], side, OrderType.LIMIT, quantity, price, null, null);
             orderService.submitOrder(bot, request);
         } catch (Exception e) {
             log.error("Bot trade failed: {}", e.getMessage());
