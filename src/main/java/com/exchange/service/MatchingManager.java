@@ -31,7 +31,7 @@ public class MatchingManager {
         );
         
         for (Order order : activeOrders) {
-            if (order.getType() == com.exchange.enums.OrderType.LIMIT || order.getType() == com.exchange.enums.OrderType.MARKET) {
+            if (order.getType() == com.exchange.enums.OrderType.LIMIT) {
                 OrderBook orderBook = getOrderBook(order.getBaseAsset().value(), order.getQuoteAsset().value());
                 orderBook.addOrder(order);
             } else {

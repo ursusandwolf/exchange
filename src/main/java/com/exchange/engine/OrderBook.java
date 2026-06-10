@@ -32,6 +32,9 @@ public class OrderBook {
         if (!order.getSymbol().equals(symbol)) {
             throw new IllegalArgumentException("Symbol mismatch: " + symbol);
         }
+        if (order.getType() == OrderType.MARKET) {
+            throw new IllegalArgumentException("MARKET orders cannot rest in the order book");
+        }
         NavigableMap<BigDecimal, OrderQueue> targetMap = order.getSide() == Side.BUY ? bids : asks;
         BigDecimal priceVal = order.getPrice() != null ? order.getPrice().value() : BigDecimal.ZERO;
         targetMap.computeIfAbsent(priceVal, k -> new OrderQueue()).addOrder(order);

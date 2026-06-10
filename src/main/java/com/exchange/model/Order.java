@@ -65,6 +65,9 @@ public class Order {
     
     @Column(precision = 24, scale = 8, nullable = false)
     private Quantity filledQuantity;   // Сколько уже исполнено
+
+    @Column(precision = 24, scale = 8, nullable = false)
+    private BigDecimal reservedAmount;
     
     @Column(nullable = false)
     private Instant createdAt;
@@ -89,6 +92,7 @@ public class Order {
         this.triggerPrice = triggerPrice;
         this.status = OrderStatus.PENDING;
         this.filledQuantity = new Quantity(BigDecimal.ZERO);
+        this.reservedAmount = BigDecimal.ZERO;
         this.createdAt = Instant.now();
         this.updatedAt = this.createdAt;
     }
@@ -154,6 +158,31 @@ public class Order {
         } else if (this.filledQuantity.value().compareTo(BigDecimal.ZERO) > 0) {
             this.status = OrderStatus.PARTIALLY_FILLED;
         }
+    }
+
+    public synchronized void setReservedAmount(BigDecimal amount) {
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("Reserved amount cannot be negative");
+        }
+        this.reservedAmount = amount;
+        this.updatedAt = Instant.now();
+    }
+
+    public synchronized void consumeReservedAmount(BigDecimal amount) {
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            return;
+        }
+        BigDecimal updated = this.reservedAmount.subtract(amount);
+        if (updated.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalStateException("Reserved amount underflow for order " + id);
+        }
+        this.reservedAmount = updated;
+        this.updatedAt = Instant.now();
+    }
+
+    public synchronized void clearReservedAmount() {
+        this.reservedAmount = BigDecimal.ZERO;
+        this.updatedAt = Instant.now();
     }
 
     /**

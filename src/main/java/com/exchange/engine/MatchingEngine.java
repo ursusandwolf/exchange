@@ -6,6 +6,7 @@ import com.exchange.enums.OrderType;
 import com.exchange.enums.Side;
 import com.exchange.model.Order;
 import com.exchange.model.Trade;
+import com.exchange.service.FeeService;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -16,8 +17,6 @@ import java.util.List;
  * Отвечает за расчет сделок. Не изменяет OrderBook напрямую, 
  * а возвращает MatchResult с инструкциями по обновлению.
  */
-import com.exchange.service.FeeService;
-
 public class MatchingEngine {
     private final FeeService feeService;
 
@@ -115,6 +114,9 @@ public class MatchingEngine {
     }
 
     private Price determineTradePrice(Order order, Order contraOrder) {
+        if (order.getType() == OrderType.MARKET && contraOrder.getType() == OrderType.MARKET) {
+            throw new IllegalStateException("Cannot match two MARKET orders without a reference price");
+        }
         if (order.getType() == OrderType.MARKET) return contraOrder.getPrice();
         if (contraOrder.getType() == OrderType.MARKET) return order.getPrice();
         return contraOrder.getPrice(); // Maker price

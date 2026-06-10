@@ -15,21 +15,18 @@ import com.exchange.enums.Side;
 import com.exchange.model.Order;
 import com.exchange.model.Trade;
 import com.exchange.model.User;
-import com.exchange.model.Wallet;
 import com.exchange.repository.OrderRepository;
 import com.exchange.repository.UserRepository;
 import jakarta.annotation.PostConstruct;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -131,6 +128,7 @@ public class OrderService {
                         new Price(request.takeProfitPrice(), quoteCurrency)
                 );
                 takeProfitOrder.linkOcoGroup(groupId);
+                takeProfitOrder.setReservedAmount(quantity.value());
 
                 Order stopLossOrder = Order.triggerOrder(
                         user.getId(),
@@ -143,6 +141,7 @@ public class OrderService {
                         new Price(request.stopLossTriggerPrice(), quoteCurrency)
                 );
                 stopLossOrder.linkOcoGroup(groupId);
+                stopLossOrder.setReservedAmount(quantity.value());
 
                 orderRepository.save(takeProfitOrder);
                 orderRepository.save(stopLossOrder);
@@ -177,7 +176,14 @@ public class OrderService {
         
         registerPostCommitSync(result, orderBook);
         updateOrderStates(result);
-        
+        releaseUnusedReservesForRemovedOrders(result);
+
+        boolean discardRemainingMarketOrder = order.getType() == OrderType.MARKET
+                && order.getRemainingQuantity().compareTo(BigDecimal.ZERO) > 0;
+        if (discardRemainingMarketOrder) {
+            order.cancel();
+        }
+
         if (order.isActive()) {
             adjustReservedAmount(userId, order);
         } else {
@@ -223,6 +229,7 @@ public class OrderService {
             try {
                 submitOrderFromTrigger(triggerOrder);
             } catch (Exception e) {
+                matchingManager.addTriggeredOrder(triggerOrder);
                 log.error("Failed to activate triggered order {}: {}", triggerOrder.getId(), e.getMessage());
             }
         }
@@ -246,6 +253,9 @@ public class OrderService {
                                                       new Quantity(triggerOrder.getRemainingQuantity()), null);
                 }
 
+                executableOrder.setReservedAmount(triggerOrder.getReservedAmount());
+                triggerOrder.clearReservedAmount();
+
                 if (triggerOrder.getOcoGroupId() != null) {
                     executableOrder.linkOcoGroup(triggerOrder.getOcoGroupId());
                 }
@@ -266,6 +276,13 @@ public class OrderService {
                 
                 registerPostCommitSync(result, orderBook);
                 updateOrderStates(result);
+                releaseUnusedReservesForRemovedOrders(result);
+
+                boolean discardRemainingMarketOrder = executableOrder.getType() == OrderType.MARKET
+                        && executableOrder.getRemainingQuantity().compareTo(BigDecimal.ZERO) > 0;
+                if (discardRemainingMarketOrder) {
+                    executableOrder.cancel();
+                }
                 
                 if (!executableOrder.isActive()) {
                     releaseUnusedReserve(executableOrder.getUserId(), executableOrder);
@@ -319,8 +336,19 @@ public class OrderService {
             Order sellOrder = trade.getSellOrder();
             buyOrder.addFilledQuantity(trade.getQuantity().value());
             sellOrder.addFilledQuantity(trade.getQuantity().value());
+            buyOrder.consumeReservedAmount(trade.getTotalAmount().add(trade.getBuyerFee()));
+            sellOrder.consumeReservedAmount(trade.getQuantity().value());
             orderRepository.save(buyOrder);
             orderRepository.save(sellOrder);
+        }
+    }
+
+    private void releaseUnusedReservesForRemovedOrders(MatchResult result) {
+        for (Order removedOrder : result.getOrdersToRemove()) {
+            if (!removedOrder.isActive()) {
+                releaseUnusedReserve(removedOrder.getUserId(), removedOrder);
+                orderRepository.save(removedOrder);
+            }
         }
     }
 
@@ -332,7 +360,9 @@ public class OrderService {
                     for (Order toRemove : result.getOrdersToRemove()) {
                         orderBook.removeOrder(toRemove);
                     }
-                    if (result.getRemainingOrder() != null) {
+                    if (result.getRemainingOrder() != null
+                            && result.getRemainingOrder().isActive()
+                            && result.getRemainingOrder().getType() != OrderType.MARKET) {
                         orderBook.addOrder(result.getRemainingOrder());
                     }
                     result.getTrades().forEach(marketDataService::broadcastTrade);
@@ -376,9 +406,12 @@ public class OrderService {
                 requiredAmount = order.getQuantity().value().multiply(estPriceVal).multiply(new BigDecimal("1.20")); // Higher buffer
             }
             BigDecimal estimatedFee = feeService.calculateTakerFee(requiredAmount);
-            walletService.reserve(userId, order.getQuoteAsset().value(), requiredAmount.add(estimatedFee), "Reserve for " + order.getType() + " BUY order " + order.getId());
+            BigDecimal reserveAmount = requiredAmount.add(estimatedFee);
+            walletService.reserve(userId, order.getQuoteAsset().value(), reserveAmount, "Reserve for " + order.getType() + " BUY order " + order.getId());
+            order.setReservedAmount(reserveAmount);
         } else {
             walletService.reserve(userId, order.getBaseAsset().value(), order.getQuantity().value(), "Reserve for " + order.getType() + " SELL order " + order.getId());
+            order.setReservedAmount(order.getQuantity().value());
         }
     }
 
@@ -386,11 +419,11 @@ public class OrderService {
     }
 
     private void releaseUnusedReserve(String userId, Order order) {
-        Wallet wallet = walletService.getWallet(userId);
-        String asset = order.getSide() == Side.BUY ? order.getQuoteAsset().value() : order.getBaseAsset().value();
-        BigDecimal reserved = wallet.getReserved(asset);
+        BigDecimal reserved = order.getReservedAmount();
         if (reserved.compareTo(BigDecimal.ZERO) > 0) {
+            String asset = order.getSide() == Side.BUY ? order.getQuoteAsset().value() : order.getBaseAsset().value();
             walletService.unreserve(userId, asset, reserved, "Release unused reserve for order " + order.getId());
+            order.clearReservedAmount();
         }
     }
 

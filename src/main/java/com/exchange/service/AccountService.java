@@ -4,6 +4,7 @@ import com.exchange.model.User;
 import com.exchange.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,7 +37,11 @@ public class AccountService {
             throw new IllegalArgumentException("Пользователь с таким email уже существует");
         }
         User user = new User(username, passwordEncoder.encode(password), false, email);
-        return userRepository.save(user);
+        try {
+            return userRepository.saveAndFlush(user);
+        } catch (DataIntegrityViolationException e) {
+            throw new IllegalArgumentException("Пользователь с таким именем или email уже существует", e);
+        }
     }
 
     @Transactional
@@ -53,8 +58,9 @@ public class AccountService {
         }
         if (!passwordEncoder.matches(password, user.getPassword())) {
             user.changePassword(passwordEncoder.encode(password));
+            user.incrementTokenVersion();
         }
-        return userRepository.save(user);
+        return userRepository.saveAndFlush(user);
     }
 
     @Transactional
@@ -62,7 +68,7 @@ public class AccountService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден: " + userId));
         user.setAdmin(admin);
-        return userRepository.save(user);
+        return userRepository.saveAndFlush(user);
     }
 
     public java.util.List<User> findAllUsers() {
@@ -87,7 +93,8 @@ public class AccountService {
         }
 
         user.changePassword(passwordEncoder.encode(newPassword));
-        userRepository.save(user);
+        user.incrementTokenVersion();
+        userRepository.saveAndFlush(user);
     }
 
     @Transactional
