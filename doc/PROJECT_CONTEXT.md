@@ -28,5 +28,6 @@ A fully functional simulation of a Centralized Exchange (CEX) with a modern Java
 - Switched to LAZY fetching for Wallet balances with safe transactional access.
 - Integrated `sonner` for non-blocking UI notifications.
 - Added full audit logging for all wallet operations.
+- Added comprehensive unit tests for critical services (`OrderService`, `WalletService`).
 
 ## Pending Items
