@@ -1,54 +1,43 @@
-import React, { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { AxiosError } from 'axios';
-import { useForm } from 'react-hook-form';
+import { useState } from 'react';
+import { useForm, type Resolver } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
-import { toast } from 'sonner';
-import { api } from '../../../shared/api';
+import { z } from 'zod';
+import { Button, Input } from '../../../shared/ui';
+import { cn } from '../../../shared/lib/cn';
+import {
+  usePlaceOrder,
+  type OrderMode,
+  type OrderSide,
+  type OrderType,
+  type PlaceOrderValues,
+} from '../model/usePlaceOrder';
+
+const optionalPositive = z.preprocess(
+  (val) => (val === '' || val === null || val === undefined ? null : Number(val)),
+  z.number().positive('Must be greater than 0').nullable().optional()
+);
 
 const orderSchema = z.object({
-  quantity: z.preprocess((val) => parseFloat(val as string), z.number().positive('Количество должно быть больше 0')),
-  price: z.preprocess((val) => val === '' ? null : parseFloat(val as string), z.number().positive('Цена должна быть больше 0').nullable()).optional(),
-  triggerPrice: z.preprocess((val) => val === '' ? null : parseFloat(val as string), z.number().positive('Цена триггера должна быть больше 0').nullable()).optional(),
-  takeProfitPrice: z.preprocess((val) => val === '' ? null : parseFloat(val as string), z.number().positive('Цена take-profit должна быть больше 0').nullable()).optional(),
-  stopLossTriggerPrice: z.preprocess((val) => val === '' ? null : parseFloat(val as string), z.number().positive('Цена stop-loss триггера должна быть больше 0').nullable()).optional(),
-  stopLossPrice: z.preprocess((val) => val === '' ? null : parseFloat(val as string), z.number().positive('Цена stop-loss должна быть больше 0').nullable()).optional(),
+  quantity: z.preprocess(
+    (val) => Number(val),
+    z.number().positive('Quantity must be greater than 0')
+  ),
+  price: optionalPositive,
+  triggerPrice: optionalPositive,
+  takeProfitPrice: optionalPositive,
+  stopLossTriggerPrice: optionalPositive,
+  stopLossPrice: optionalPositive,
 });
 
 type OrderFormData = z.output<typeof orderSchema>;
 
-interface StandardOrderRequest {
-  baseAsset: string;
-  quoteAsset: string;
-  side: 'BUY' | 'SELL';
-  type: 'LIMIT' | 'MARKET' | 'STOP_LOSS' | 'TAKE_PROFIT';
-  quantity: number;
-  price?: number | null;
-  triggerPrice?: number | null;
-}
+const ORDER_TYPES: OrderType[] = ['LIMIT', 'MARKET', 'STOP_LOSS', 'TAKE_PROFIT'];
 
-interface OcoOrderRequest {
-  baseAsset: string;
-  quoteAsset: string;
-  side: 'SELL';
-  quantity: number;
-  takeProfitPrice: number;
-  stopLossTriggerPrice: number;
-  stopLossPrice?: number | null;
-}
-
-type MutationPayload =
-  | { endpoint: '/orders/submit'; body: StandardOrderRequest }
-  | { endpoint: '/orders/oco'; body: OcoOrderRequest };
-
-export const PlaceOrderForm: React.FC<{ symbol: string }> = ({ symbol }) => {
-  const [side, setSide] = useState<'BUY' | 'SELL'>('BUY');
-  const [type, setType] = useState<'LIMIT' | 'MARKET' | 'STOP_LOSS' | 'TAKE_PROFIT'>('LIMIT');
-  const [mode, setMode] = useState<'STANDARD' | 'OCO'>('STANDARD');
-  const queryClient = useQueryClient();
-
-  const [baseAsset, quoteAsset] = symbol.split('/');
+export function PlaceOrderForm({ symbol }: { symbol: string }) {
+  const [side, setSide] = useState<OrderSide>('BUY');
+  const [type, setType] = useState<OrderType>('LIMIT');
+  const [mode, setMode] = useState<OrderMode>('STANDARD');
+  const { baseAsset, quoteAsset, isPending, submitStandard, submitOco } = usePlaceOrder(symbol);
 
   const {
     register,
@@ -56,9 +45,9 @@ export const PlaceOrderForm: React.FC<{ symbol: string }> = ({ symbol }) => {
     reset,
     formState: { errors },
   } = useForm<OrderFormData>({
-    resolver: zodResolver(orderSchema) as any,
+    resolver: zodResolver(orderSchema) as Resolver<OrderFormData>,
     defaultValues: {
-      quantity: 0,
+      quantity: undefined,
       price: null,
       triggerPrice: null,
       takeProfitPrice: null,
@@ -67,57 +56,22 @@ export const PlaceOrderForm: React.FC<{ symbol: string }> = ({ symbol }) => {
     },
   });
 
-  const mutation = useMutation({
-    mutationFn: (payload: MutationPayload) => api.post(payload.endpoint, payload.body),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['portfolio'] });
-      queryClient.invalidateQueries({ queryKey: ['orders'] });
-      reset();
-      toast.success('Ордер успешно размещен');
-    },
-    onError: (error: AxiosError<any>) => {
-      const message = error.response?.data?.message || error.response?.data || 'Ошибка при размещении ордера';
-      toast.error(message);
-    }
-  });
-
-  const onSubmit = (data: OrderFormData) => {
-    if (mode === 'OCO') {
-      if (data.takeProfitPrice == null || data.stopLossTriggerPrice == null) {
-        toast.error('Для OCO нужны take-profit и stop-loss trigger цены');
+  const onSubmit = async (data: OrderFormData) => {
+    const values = data as PlaceOrderValues;
+    try {
+      if (mode === 'OCO') {
+        const ok = await submitOco(values);
+        if (ok) reset();
         return;
       }
-
-      mutation.mutate({
-        endpoint: '/orders/oco',
-        body: {
-          baseAsset,
-          quoteAsset,
-          side: 'SELL',
-          quantity: data.quantity,
-          takeProfitPrice: data.takeProfitPrice,
-          stopLossTriggerPrice: data.stopLossTriggerPrice,
-          stopLossPrice: data.stopLossPrice ?? null,
-        },
-      });
-      return;
+      await submitStandard(side, type, values);
+      reset();
+    } catch {
+      // toast handled in hook
     }
-
-    mutation.mutate({
-      endpoint: '/orders/submit',
-      body: {
-        ...data,
-        baseAsset,
-        quoteAsset,
-        side,
-        type,
-        price: type === 'MARKET' ? null : data.price,
-        triggerPrice: (type === 'STOP_LOSS' || type === 'TAKE_PROFIT') ? data.triggerPrice : null,
-      } as StandardOrderRequest,
-    });
   };
 
-  const handleModeChange = (nextMode: 'STANDARD' | 'OCO') => {
+  const handleModeChange = (nextMode: OrderMode) => {
     setMode(nextMode);
     if (nextMode === 'OCO') {
       setSide('SELL');
@@ -126,146 +80,145 @@ export const PlaceOrderForm: React.FC<{ symbol: string }> = ({ symbol }) => {
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-1 overflow-x-auto pb-1">
-        <button
-          onClick={() => handleModeChange('STANDARD')}
-          className={`px-4 py-1 rounded text-xs font-bold transition-colors ${mode === 'STANDARD' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}
-        >
-          STANDARD
-        </button>
-        <button
-          onClick={() => handleModeChange('OCO')}
-          className={`px-4 py-1 rounded text-xs font-bold transition-colors ${mode === 'OCO' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}
-        >
-          OCO
-        </button>
+      <div className="flex gap-1" role="tablist" aria-label="Order mode">
+        {(['STANDARD', 'OCO'] as const).map((item) => (
+          <button
+            key={item}
+            type="button"
+            role="tab"
+            aria-selected={mode === item}
+            onClick={() => handleModeChange(item)}
+            className={cn(
+              'rounded-md px-3 py-1.5 text-xs font-semibold transition-colors',
+              mode === item ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-accent'
+            )}
+          >
+            {item}
+          </button>
+        ))}
       </div>
 
-      <div className="flex gap-1 overflow-x-auto pb-1">
+      <div className="grid grid-cols-2 gap-1" role="group" aria-label="Order side">
         <button
+          type="button"
           onClick={() => setSide('BUY')}
           disabled={mode === 'OCO'}
-          className={`px-4 py-1 rounded text-xs font-bold transition-colors ${side === 'BUY' ? 'bg-primary text-primary-foreground' : 'bg-muted'} ${mode === 'OCO' ? 'opacity-50 cursor-not-allowed' : ''}`}
+          className={cn(
+            'rounded-md py-2 text-xs font-bold transition-colors',
+            side === 'BUY' ? 'bg-emerald-600 text-white' : 'bg-muted',
+            mode === 'OCO' && 'cursor-not-allowed opacity-50'
+          )}
         >
           BUY
         </button>
         <button
+          type="button"
           onClick={() => setSide('SELL')}
-          className={`px-4 py-1 rounded text-xs font-bold transition-colors ${side === 'SELL' ? 'bg-destructive text-destructive-foreground' : 'bg-muted'}`}
+          className={cn(
+            'rounded-md py-2 text-xs font-bold transition-colors',
+            side === 'SELL' ? 'bg-destructive text-destructive-foreground' : 'bg-muted'
+          )}
         >
           SELL
         </button>
       </div>
 
       {mode === 'STANDARD' ? (
-        <div className="flex gap-1 text-[10px]">
-          {['LIMIT', 'MARKET', 'STOP_LOSS', 'TAKE_PROFIT'].map((t) => (
+        <div className="flex flex-wrap gap-1" role="group" aria-label="Order type">
+          {ORDER_TYPES.map((item) => (
             <button
-              key={t}
-              onClick={() => setType(t as any)}
-              className={`px-2 py-1 rounded transition-colors ${type === t ? 'bg-accent' : 'hover:bg-accent/50'}`}
+              key={item}
+              type="button"
+              onClick={() => setType(item)}
+              className={cn(
+                'rounded px-2 py-1 text-[10px] font-medium uppercase tracking-wide',
+                type === item ? 'bg-accent' : 'hover:bg-accent/50'
+              )}
             >
-              {t.replace('_', ' ')}
+              {item.replaceAll('_', ' ')}
             </button>
           ))}
         </div>
       ) : (
-        <p className="text-[10px] text-muted-foreground">
-          OCO создаёт пару SELL-ордеров: take-profit и stop-loss. Когда один срабатывает, второй отменяется автоматически.
+        <p className="text-xs text-muted-foreground">
+          OCO places linked SELL take-profit and stop-loss orders. When one triggers, the other cancels.
         </p>
       )}
 
-      <form onSubmit={handleSubmit(onSubmit as any)} className="space-y-3">
-        <div className="space-y-1">
-          <label className="text-[10px] text-muted-foreground uppercase font-bold">Quantity ({baseAsset})</label>
-          <input
-            {...register('quantity')}
-            type="number"
-            step="0.0001"
-            className={`w-full p-2 border rounded bg-background text-sm ${errors.quantity ? 'border-destructive' : ''}`}
-            placeholder="0.00"
-          />
-          {errors.quantity && <p className="text-[10px] text-destructive">{errors.quantity.message}</p>}
-        </div>
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
+        <Input
+          label={`Quantity (${baseAsset})`}
+          type="number"
+          step="0.0001"
+          placeholder="0.00"
+          error={errors.quantity?.message}
+          {...register('quantity')}
+        />
 
         {mode === 'STANDARD' && (type === 'STOP_LOSS' || type === 'TAKE_PROFIT') && (
-          <div className="space-y-1">
-            <label className="text-[10px] text-muted-foreground uppercase font-bold">Trigger Price ({quoteAsset})</label>
-            <input
-              {...register('triggerPrice')}
-              type="number"
-              step="0.01"
-              className={`w-full p-2 border rounded bg-background text-sm ${errors.triggerPrice ? 'border-destructive' : ''}`}
-              placeholder="0.00"
-            />
-            {errors.triggerPrice && <p className="text-[10px] text-destructive">{errors.triggerPrice.message}</p>}
-          </div>
+          <Input
+            label={`Trigger price (${quoteAsset})`}
+            type="number"
+            step="0.01"
+            placeholder="0.00"
+            error={errors.triggerPrice?.message}
+            {...register('triggerPrice')}
+          />
         )}
 
         {mode === 'OCO' && (
           <>
-            <div className="space-y-1">
-              <label className="text-[10px] text-muted-foreground uppercase font-bold">Take Profit Price ({quoteAsset})</label>
-              <input
-                {...register('takeProfitPrice')}
-                type="number"
-                step="0.01"
-                className={`w-full p-2 border rounded bg-background text-sm ${errors.takeProfitPrice ? 'border-destructive' : ''}`}
-                placeholder="0.00"
-              />
-              {errors.takeProfitPrice && <p className="text-[10px] text-destructive">{errors.takeProfitPrice.message}</p>}
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[10px] text-muted-foreground uppercase font-bold">Stop Loss Trigger Price ({quoteAsset})</label>
-              <input
-                {...register('stopLossTriggerPrice')}
-                type="number"
-                step="0.01"
-                className={`w-full p-2 border rounded bg-background text-sm ${errors.stopLossTriggerPrice ? 'border-destructive' : ''}`}
-                placeholder="0.00"
-              />
-              {errors.stopLossTriggerPrice && <p className="text-[10px] text-destructive">{errors.stopLossTriggerPrice.message}</p>}
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[10px] text-muted-foreground uppercase font-bold">Stop Loss Price (Optional, {quoteAsset})</label>
-              <input
-                {...register('stopLossPrice')}
-                type="number"
-                step="0.01"
-                className={`w-full p-2 border rounded bg-background text-sm ${errors.stopLossPrice ? 'border-destructive' : ''}`}
-                placeholder="0.00"
-              />
-              {errors.stopLossPrice && <p className="text-[10px] text-destructive">{errors.stopLossPrice.message}</p>}
-            </div>
+            <Input
+              label={`Take-profit (${quoteAsset})`}
+              type="number"
+              step="0.01"
+              placeholder="0.00"
+              error={errors.takeProfitPrice?.message}
+              {...register('takeProfitPrice')}
+            />
+            <Input
+              label={`Stop-loss trigger (${quoteAsset})`}
+              type="number"
+              step="0.01"
+              placeholder="0.00"
+              error={errors.stopLossTriggerPrice?.message}
+              {...register('stopLossTriggerPrice')}
+            />
+            <Input
+              label={`Stop-loss limit (optional, ${quoteAsset})`}
+              type="number"
+              step="0.01"
+              placeholder="0.00"
+              error={errors.stopLossPrice?.message}
+              {...register('stopLossPrice')}
+            />
           </>
         )}
 
         {mode === 'STANDARD' && type !== 'MARKET' && (
-          <div className="space-y-1">
-            <label className="text-[10px] text-muted-foreground uppercase font-bold">
-              { (type === 'STOP_LOSS' || type === 'TAKE_PROFIT') ? 'Limit Price (Optional)' : `Price (${quoteAsset})` }
-            </label>
-            <input
-              {...register('price')}
-              type="number"
-              step="0.01"
-              className={`w-full p-2 border rounded bg-background text-sm ${errors.price ? 'border-destructive' : ''}`}
-              placeholder="0.00"
-            />
-            {errors.price && <p className="text-[10px] text-destructive">{errors.price.message}</p>}
-          </div>
+          <Input
+            label={
+              type === 'STOP_LOSS' || type === 'TAKE_PROFIT'
+                ? 'Limit price (optional)'
+                : `Price (${quoteAsset})`
+            }
+            type="number"
+            step="0.01"
+            placeholder="0.00"
+            error={errors.price?.message}
+            {...register('price')}
+          />
         )}
 
-        <button
+        <Button
           type="submit"
-          disabled={mutation.isPending}
-          className={`w-full py-2 rounded font-bold transition-all text-sm ${side === 'BUY' ? 'bg-primary text-primary-foreground' : 'bg-destructive text-destructive-foreground'} ${mutation.isPending ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90 active:scale-[0.98]'}`}
+          variant={side === 'BUY' ? 'primary' : 'danger'}
+          isLoading={isPending}
+          className="w-full"
         >
-          {mutation.isPending ? 'Sending...' : mode === 'OCO' ? `Place OCO ${baseAsset}` : `${side} ${baseAsset}`}
-        </button>
+          {mode === 'OCO' ? `Place OCO ${baseAsset}` : `${side} ${baseAsset}`}
+        </Button>
       </form>
     </div>
   );
-};
+}

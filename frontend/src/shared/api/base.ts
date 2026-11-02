@@ -11,12 +11,12 @@ api.interceptors.request.use((config) => {
   const authData = localStorage.getItem('auth-storage');
   if (authData) {
     try {
-      const { state } = JSON.parse(authData);
-      if (state.token) {
+      const { state } = JSON.parse(authData) as { state?: { token?: string } };
+      if (state?.token) {
         config.headers.Authorization = `Bearer ${state.token}`;
       }
     } catch {
-      // silent fail
+      // ignore malformed persisted auth
     }
   }
   return config;
@@ -26,7 +26,8 @@ export const setupResponseInterceptors = (onUnauthorized: () => void) => {
   api.interceptors.response.use(
     (response) => response,
     (error) => {
-      if (error.response?.status === 401 || error.response?.status === 403) {
+      // Only revoke session on auth failure; keep session on 403 Forbidden
+      if (error.response?.status === 401) {
         onUnauthorized();
       }
       return Promise.reject(error);

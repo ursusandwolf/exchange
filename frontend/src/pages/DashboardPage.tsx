@@ -1,40 +1,45 @@
-import React from 'react';
-import { Chart, OrderBook, TradingForm, Portfolio, RecentTrades } from '../widgets';
+import { Chart, OrderBook, TradingForm, Portfolio, RecentTrades, SymbolSwitcher } from '../widgets';
+import { Panel } from '../shared/ui';
+import { useSymbolStore } from '../entities/market';
 
-export const DashboardPage: React.FC = () => {
-  const symbol = "BTC/USDT";
+export function DashboardPage() {
+  const symbol = useSymbolStore((state) => state.symbol);
 
   return (
-    <div className="grid grid-cols-12 gap-6 h-full">
-      {/* Chart Section */}
-      <div className="col-span-12 lg:col-span-8 space-y-6">
-        <div className="bg-card border rounded-lg p-4 h-[500px]">
-          <Chart symbol={symbol} />
+    <div className="flex h-full flex-col gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Spot desk</p>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">{symbol}</h1>
         </div>
-        
-        <div className="grid grid-cols-2 gap-6">
-          <div className="bg-card border rounded-lg p-4 min-h-[350px]">
-            <h3 className="font-bold mb-4 border-b pb-2">Trading</h3>
-            <TradingForm symbol={symbol} />
-          </div>
-          <div className="bg-card border rounded-lg p-4 min-h-[350px] flex flex-col">
-            <h3 className="font-bold mb-4 border-b pb-2">Recent Trades</h3>
-            <RecentTrades symbol={symbol} />
-          </div>
-        </div>
+        <SymbolSwitcher />
       </div>
 
-      {/* Sidebar Section */}
-      <div className="col-span-12 lg:col-span-4 space-y-6">
-        <div className="bg-card border rounded-lg p-4 h-[450px] flex flex-col">
-          <h3 className="font-bold mb-4 border-b pb-2">Order Book</h3>
-          <OrderBook symbol={symbol} />
+      <div className="grid grid-cols-12 gap-4 lg:gap-5">
+        <div className="col-span-12 space-y-4 lg:col-span-8">
+          <Panel title={`${symbol} · 1m`} className="min-h-[320px] lg:min-h-[460px]" bodyClassName="p-2 sm:p-3 h-[280px] sm:h-[420px]">
+            <Chart symbol={symbol} />
+          </Panel>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <Panel title="Trade">
+              <TradingForm symbol={symbol} />
+            </Panel>
+            <Panel title="Recent trades" bodyClassName="flex min-h-[280px] flex-col p-4">
+              <RecentTrades symbol={symbol} />
+            </Panel>
+          </div>
         </div>
-        <div className="bg-card border rounded-lg p-4 min-h-[250px]">
-          <h3 className="font-bold mb-4 border-b pb-2">Portfolio</h3>
-          <Portfolio />
+
+        <div className="col-span-12 space-y-4 lg:col-span-4">
+          <Panel title="Order book" bodyClassName="flex min-h-[320px] flex-col p-4 lg:min-h-[400px]">
+            <OrderBook symbol={symbol} />
+          </Panel>
+          <Panel title="Portfolio" bodyClassName="min-h-[220px]">
+            <Portfolio />
+          </Panel>
         </div>
       </div>
     </div>
   );
-};
+}

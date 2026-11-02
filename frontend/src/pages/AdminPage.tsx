@@ -201,7 +201,16 @@ export const AdminPage: React.FC = () => {
                       {user.admin ? 'Admin access enabled' : 'Regular user account'}
                     </div>
                     <button
-                      onClick={() => toggleAdminMutation.mutate({ userId: user.userId, admin: !user.admin })}
+                      onClick={() => {
+                        const nextAdmin = !user.admin;
+                        const confirmed = window.confirm(
+                          nextAdmin
+                            ? `Grant admin role to ${user.username}?`
+                            : `Revoke admin role from ${user.username}?`
+                        );
+                        if (!confirmed) return;
+                        toggleAdminMutation.mutate({ userId: user.userId, admin: nextAdmin });
+                      }}
                       className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
                         user.admin
                           ? 'border border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100'

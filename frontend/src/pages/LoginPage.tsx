@@ -1,78 +1,88 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { AxiosError } from 'axios';
 import { api } from '../shared/api';
+import type { AuthResponse } from '../shared/api/types';
 import { useAuthStore } from '../entities/user';
+import { Button, Input } from '../shared/ui';
 
-export const LoginPage: React.FC = () => {
+export function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [pending, setPending] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
   const setAuth = useAuthStore((state) => state.setAuth);
+  const from = (location.state as { from?: string } | null)?.from ?? '/';
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setPending(true);
+    setError('');
     try {
-      const response = await api.post('/auth/login', { username, password });
+      const response = await api.post<AuthResponse>('/auth/login', { username, password });
       setAuth(response.data.token, response.data.username, response.data.userId, response.data.admin);
-      navigate('/');
+      navigate(from, { replace: true });
     } catch (err: unknown) {
       if (err instanceof AxiosError) {
         const data = err.response?.data;
-        if (typeof data === 'string') {
-          setError(data);
-        } else if (typeof data === 'object' && data !== null) {
-          setError(Object.values(data).join(', '));
-        } else {
-          setError('Login failed');
-        }
+        if (typeof data === 'string') setError(data);
+        else if (typeof data === 'object' && data !== null) setError(Object.values(data).join(', '));
+        else setError('Login failed');
       } else {
         setError('An unexpected error occurred');
       }
+    } finally {
+      setPending(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-muted/50">
-      <div className="w-full max-w-md p-8 bg-card rounded-lg border shadow-sm">
-        <h2 className="text-2xl font-bold text-center mb-6">Login to Exchange</h2>
-        {error && <div className="p-3 mb-4 text-sm text-destructive bg-destructive/10 rounded">{error}</div>}
+    <div className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(37,99,235,0.12),_transparent_40%),hsl(var(--muted)/0.45)] p-4">
+      <div className="w-full max-w-md rounded-2xl border bg-card p-8 shadow-sm">
+        <h1 className="mb-2 text-center text-2xl font-semibold tracking-tight">Sign in</h1>
+        <p className="mb-6 text-center text-sm text-muted-foreground">Access the Gemini Exchange spot desk</p>
+        {error ? (
+          <div className="mb-4 rounded-md bg-destructive/10 p-3 text-sm text-destructive" role="alert">
+            {error}
+          </div>
+        ) : null}
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Username</label>
-            <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="w-full p-2 border rounded bg-background"
-              required
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full p-2 border rounded bg-background"
-              required
-            />
-          </div>
-          <button
-            type="submit"
-            className="w-full py-2 bg-primary text-primary-foreground rounded font-medium hover:opacity-90 transition-opacity"
-          >
-            Sign In
-          </button>
+          <Input
+            label="Username"
+            name="username"
+            autoComplete="username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            required
+          />
+          <Input
+            label="Password"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+          <Button type="submit" className="w-full" isLoading={pending}>
+            Sign in
+          </Button>
         </form>
         <p className="mt-4 text-center text-sm text-muted-foreground">
-          Don't have an account? <span onClick={() => navigate('/register')} className="text-primary cursor-pointer hover:underline">Register</span>
+          No account?{' '}
+          <Link to="/register" className="font-medium text-primary hover:underline">
+            Register
+          </Link>
         </p>
         <p className="mt-2 text-center text-sm text-muted-foreground">
-          Forgot password? <span onClick={() => navigate('/reset-password')} className="text-primary cursor-pointer hover:underline">Reset it</span>
+          Forgot password?{' '}
+          <Link to="/reset-password" className="font-medium text-primary hover:underline">
+            Reset it
+          </Link>
         </p>
       </div>
     </div>
   );
-};
+}
