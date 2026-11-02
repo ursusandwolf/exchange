@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../shared/api';
 import { useAuthStore } from '../entities/user';
+import { Button, EmptyState, Input, Panel } from '../shared/ui';
 import { toast } from 'sonner';
 
 type AdminStatsResponse = {
@@ -50,10 +51,10 @@ export const AdminPage: React.FC = () => {
     onSuccess: async (_, variables) => {
       await queryClient.invalidateQueries({ queryKey: ['admin-users'] });
       await queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
-      toast.success(variables.admin ? 'Пользователь назначен администратором' : 'Роль администратора снята');
+      toast.success(variables.admin ? 'User promoted to admin' : 'Admin role revoked');
     },
     onError: () => {
-      toast.error('Не удалось обновить роль пользователя');
+      toast.error('Failed to update user role');
     },
   });
 
@@ -92,7 +93,8 @@ export const AdminPage: React.FC = () => {
             <div className="space-y-2">
               <h1 className="text-3xl font-black tracking-tight sm:text-4xl">User management dashboard</h1>
               <p className="max-w-2xl text-sm text-slate-300">
-                Monitor exchange health, inspect wallet exposure, and promote or revoke admin access without leaving the panel.
+                Monitor exchange health, inspect wallet exposure, and promote or revoke admin access without leaving the
+                panel.
               </p>
             </div>
           </div>
@@ -111,20 +113,27 @@ export const AdminPage: React.FC = () => {
           <div className="space-y-3">
             {Object.entries(stats?.exchangeProfit ?? {}).length > 0 ? (
               Object.entries(stats?.exchangeProfit ?? {}).map(([asset, amount]) => (
-                <div key={asset} className="flex items-center justify-between rounded-lg border bg-background/60 px-3 py-2 text-sm">
+                <div
+                  key={asset}
+                  className="flex items-center justify-between rounded-lg border bg-background/60 px-3 py-2 text-sm"
+                >
                   <span className="font-medium">{asset}</span>
                   <span className="font-mono">{formatNumber(amount)}</span>
                 </div>
               ))
             ) : (
-              <EmptyState text="No fee wallet found" />
+              <EmptyState title="No fee wallet found" />
             )}
           </div>
         </Panel>
 
         <Panel title="System health">
           <div className="space-y-3">
-            <InfoRow label="System fee user" value={stats?.systemUserPresent ? 'Present' : 'Missing'} accent={stats?.systemUserPresent ? 'emerald' : 'rose'} />
+            <InfoRow
+              label="System fee user"
+              value={stats?.systemUserPresent ? 'Present' : 'Missing'}
+              accent={stats?.systemUserPresent ? 'emerald' : 'rose'}
+            />
             <InfoRow label="Tracked fee assets" value={Object.keys(stats?.exchangeProfit ?? {}).length} />
             <InfoRow label="Fee total" value={formatNumber(totalReserved)} />
           </div>
@@ -132,40 +141,47 @@ export const AdminPage: React.FC = () => {
 
         <Panel title="Controls">
           <div className="space-y-3">
-            <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Search users</label>
-            <input
+            <Input
+              label="Search users"
+              name="admin-search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="username or user id"
-              className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary"
             />
 
             <div className="flex flex-wrap gap-2">
-              <FilterButton active={filter === 'all'} onClick={() => setFilter('all')}>All</FilterButton>
-              <FilterButton active={filter === 'admins'} onClick={() => setFilter('admins')}>Admins</FilterButton>
-              <FilterButton active={filter === 'users'} onClick={() => setFilter('users')}>Users</FilterButton>
+              <FilterButton active={filter === 'all'} onClick={() => setFilter('all')}>
+                All
+              </FilterButton>
+              <FilterButton active={filter === 'admins'} onClick={() => setFilter('admins')}>
+                Admins
+              </FilterButton>
+              <FilterButton active={filter === 'users'} onClick={() => setFilter('users')}>
+                Users
+              </FilterButton>
             </div>
 
-            <button
+            <Button
+              variant="secondary"
+              className="w-full"
               onClick={() => {
                 queryClient.invalidateQueries({ queryKey: ['admin-users'] });
                 queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
               }}
-              className="w-full rounded-lg border px-3 py-2 text-sm font-medium transition hover:bg-accent"
             >
               Refresh data
-            </button>
+            </Button>
           </div>
         </Panel>
       </div>
 
       <Panel title={`Users (${filteredUsers.length})`}>
         {usersQuery.isLoading ? (
-          <LoadingState />
+          <EmptyState title="Loading admin data…" />
         ) : usersQuery.isError ? (
-          <ErrorState text="Failed to load users" />
+          <EmptyState title="Failed to load users" className="border-rose-200 bg-rose-50 text-rose-700" />
         ) : filteredUsers.length === 0 ? (
-          <EmptyState text="No users match the current search and filter" />
+          <EmptyState title="No users match the current search and filter" />
         ) : (
           <div className="grid gap-4 xl:grid-cols-2">
             {filteredUsers.map((user) => (
@@ -183,12 +199,15 @@ export const AdminPage: React.FC = () => {
                       <p className="break-all text-xs text-muted-foreground">{user.userId}</p>
                     </div>
 
-                    <button
-                      onClick={() => navigator.clipboard.writeText(user.userId).then(() => toast.success('User ID copied'))}
-                      className="rounded-lg border px-3 py-1.5 text-xs font-medium transition hover:bg-accent"
+                    <Button
+                      variant="secondary"
+                      className="px-3 py-1.5 text-xs"
+                      onClick={() =>
+                        navigator.clipboard.writeText(user.userId).then(() => toast.success('User ID copied'))
+                      }
                     >
                       Copy ID
-                    </button>
+                    </Button>
                   </div>
 
                   <div className="grid gap-3 md:grid-cols-2">
@@ -200,7 +219,9 @@ export const AdminPage: React.FC = () => {
                     <div className="text-xs text-muted-foreground">
                       {user.admin ? 'Admin access enabled' : 'Regular user account'}
                     </div>
-                    <button
+                    <Button
+                      variant={user.admin ? 'danger' : 'primary'}
+                      isLoading={toggleAdminMutation.isPending}
                       onClick={() => {
                         const nextAdmin = !user.admin;
                         const confirmed = window.confirm(
@@ -211,15 +232,9 @@ export const AdminPage: React.FC = () => {
                         if (!confirmed) return;
                         toggleAdminMutation.mutate({ userId: user.userId, admin: nextAdmin });
                       }}
-                      className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
-                        user.admin
-                          ? 'border border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100'
-                          : 'border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                      }`}
-                      disabled={toggleAdminMutation.isPending}
                     >
                       {user.admin ? 'Revoke admin' : 'Make admin'}
-                    </button>
+                    </Button>
                   </div>
                 </div>
               </article>
@@ -238,17 +253,13 @@ const MiniStat: React.FC<{ label: string; value: number }> = ({ label, value }) 
   </div>
 );
 
-const Panel: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
-  <section className="rounded-2xl border bg-card p-5 shadow-sm">
-    <div className="mb-4 flex items-center justify-between border-b pb-3">
-      <h2 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">{title}</h2>
-    </div>
-    {children}
-  </section>
-);
-
-const FilterButton: React.FC<React.PropsWithChildren<{ active: boolean; onClick: () => void }>> = ({ active, onClick, children }) => (
+const FilterButton: React.FC<React.PropsWithChildren<{ active: boolean; onClick: () => void }>> = ({
+  active,
+  onClick,
+  children,
+}) => (
   <button
+    type="button"
     onClick={onClick}
     className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
       active ? 'bg-primary text-primary-foreground' : 'border bg-background hover:bg-accent'
@@ -290,25 +301,25 @@ const WalletBlock: React.FC<{ title: string; values: Record<string, number> }> =
   );
 };
 
-const InfoRow: React.FC<{ label: string; value: React.ReactNode; accent?: 'emerald' | 'rose' }> = ({ label, value, accent }) => (
+const InfoRow: React.FC<{ label: string; value: React.ReactNode; accent?: 'emerald' | 'rose' }> = ({
+  label,
+  value,
+  accent,
+}) => (
   <div className="flex items-center justify-between rounded-lg border bg-background/60 px-3 py-2 text-sm">
     <span className="text-muted-foreground">{label}</span>
-    <span className={accent === 'emerald' ? 'font-semibold text-emerald-600' : accent === 'rose' ? 'font-semibold text-rose-600' : 'font-medium'}>
+    <span
+      className={
+        accent === 'emerald'
+          ? 'font-semibold text-emerald-600'
+          : accent === 'rose'
+            ? 'font-semibold text-rose-600'
+            : 'font-medium'
+      }
+    >
       {value}
     </span>
   </div>
-);
-
-const EmptyState: React.FC<{ text: string }> = ({ text }) => (
-  <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">{text}</div>
-);
-
-const LoadingState: React.FC = () => (
-  <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">Loading admin data...</div>
-);
-
-const ErrorState: React.FC<{ text: string }> = ({ text }) => (
-  <div className="rounded-lg border border-rose-200 bg-rose-50 p-6 text-center text-sm text-rose-700">{text}</div>
 );
 
 const formatNumber = (value: number) =>

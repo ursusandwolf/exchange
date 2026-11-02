@@ -1,19 +1,22 @@
-import React, { useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { AxiosError } from 'axios';
 import { toast } from 'sonner';
 import { api } from '../shared/api';
 import { useAuthStore } from '../entities/user';
+import { Button, Input } from '../shared/ui';
 
-export const ChangePasswordPage: React.FC = () => {
+export function ChangePasswordPage() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [error, setError] = useState('');
+  const [pending, setPending] = useState(false);
   const navigate = useNavigate();
   const token = useAuthStore((state) => state.token);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setPending(true);
     setError('');
 
     try {
@@ -25,16 +28,14 @@ export const ChangePasswordPage: React.FC = () => {
     } catch (err: unknown) {
       if (err instanceof AxiosError) {
         const data = err.response?.data;
-        if (typeof data === 'string') {
-          setError(data);
-        } else if (typeof data === 'object' && data !== null) {
-          setError(Object.values(data).join(', '));
-        } else {
-          setError('Password update failed');
-        }
+        if (typeof data === 'string') setError(data);
+        else if (typeof data === 'object' && data !== null) setError(Object.values(data).join(', '));
+        else setError('Password update failed');
       } else {
         setError('An unexpected error occurred');
       }
+    } finally {
+      setPending(false);
     }
   };
 
@@ -43,40 +44,45 @@ export const ChangePasswordPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-muted/50">
-      <div className="w-full max-w-md p-8 bg-card rounded-lg border shadow-sm">
-        <h2 className="text-2xl font-bold text-center mb-6">Change Password</h2>
-        {error && <div className="p-3 mb-4 text-sm text-destructive bg-destructive/10 rounded">{error}</div>}
+    <div className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(37,99,235,0.12),_transparent_40%),hsl(var(--muted)/0.45)] p-4">
+      <div className="w-full max-w-md rounded-2xl border bg-card p-8 shadow-sm">
+        <h1 className="mb-2 text-center text-2xl font-semibold tracking-tight">Change password</h1>
+        <p className="mb-6 text-center text-sm text-muted-foreground">Update credentials for your exchange account</p>
+        {error ? (
+          <div className="mb-4 rounded-md bg-destructive/10 p-3 text-sm text-destructive" role="alert">
+            {error}
+          </div>
+        ) : null}
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Current password</label>
-            <input
-              type="password"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              className="w-full p-2 border rounded bg-background"
-              required
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium">New password</label>
-            <input
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              className="w-full p-2 border rounded bg-background"
-              required
-              minLength={6}
-            />
-          </div>
-          <button
-            type="submit"
-            className="w-full py-2 bg-primary text-primary-foreground rounded font-medium hover:opacity-90 transition-opacity"
-          >
+          <Input
+            label="Current password"
+            name="currentPassword"
+            type="password"
+            autoComplete="current-password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            required
+          />
+          <Input
+            label="New password"
+            name="newPassword"
+            type="password"
+            autoComplete="new-password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            required
+            minLength={6}
+          />
+          <Button type="submit" className="w-full" isLoading={pending}>
             Update password
-          </button>
+          </Button>
         </form>
+        <p className="mt-4 text-center text-sm text-muted-foreground">
+          <Link to="/" className="font-medium text-primary hover:underline">
+            Back to desk
+          </Link>
+        </p>
       </div>
     </div>
   );
-};
+}

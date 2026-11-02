@@ -1,16 +1,19 @@
-import React, { useEffect, useState } from 'react';
-import { useSearchParams, useNavigate, Navigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { AxiosError } from 'axios';
 import { toast } from 'sonner';
 import { api } from '../shared/api';
 import { useAuthStore } from '../entities/user';
+import { Button, Input } from '../shared/ui';
 
-export const ResetPasswordPage: React.FC = () => {
+export function ResetPasswordPage() {
   const [email, setEmail] = useState('');
   const [token, setToken] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [requestPending, setRequestPending] = useState(false);
+  const [confirmPending, setConfirmPending] = useState(false);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const isAuthenticated = useAuthStore((state) => !!state.token);
@@ -23,8 +26,9 @@ export const ResetPasswordPage: React.FC = () => {
     }
   }, [initialToken]);
 
-  const handleRequest = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleRequest = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setRequestPending(true);
     setError('');
     setMessage('');
 
@@ -38,11 +42,14 @@ export const ResetPasswordPage: React.FC = () => {
       } else {
         setError('An unexpected error occurred');
       }
+    } finally {
+      setRequestPending(false);
     }
   };
 
-  const handleConfirm = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleConfirm = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setConfirmPending(true);
     setError('');
     setMessage('');
 
@@ -59,6 +66,8 @@ export const ResetPasswordPage: React.FC = () => {
       } else {
         setError('An unexpected error occurred');
       }
+    } finally {
+      setConfirmPending(false);
     }
   };
 
@@ -67,57 +76,72 @@ export const ResetPasswordPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-muted/50">
-      <div className="w-full max-w-md p-8 bg-card rounded-lg border shadow-sm space-y-8">
+    <div className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(37,99,235,0.12),_transparent_40%),hsl(var(--muted)/0.45)] p-4">
+      <div className="w-full max-w-md space-y-8 rounded-2xl border bg-card p-8 shadow-sm">
         <div>
-          <h2 className="text-2xl font-bold text-center mb-2">Reset Password</h2>
-          <p className="text-sm text-muted-foreground text-center">
+          <h1 className="mb-2 text-center text-2xl font-semibold tracking-tight">Reset password</h1>
+          <p className="text-center text-sm text-muted-foreground">
             Request a reset link, then confirm with the token from email.
           </p>
         </div>
 
-        {message && <div className="p-3 text-sm text-foreground bg-accent/20 rounded">{message}</div>}
-        {error && <div className="p-3 text-sm text-destructive bg-destructive/10 rounded">{error}</div>}
+        {message ? (
+          <div className="rounded-md bg-accent/20 p-3 text-sm text-foreground" role="status">
+            {message}
+          </div>
+        ) : null}
+        {error ? (
+          <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive" role="alert">
+            {error}
+          </div>
+        ) : null}
 
         <form onSubmit={handleRequest} className="space-y-3">
-          <h3 className="font-medium">1. Request link</h3>
-          <input
+          <h2 className="text-sm font-semibold">1. Request link</h2>
+          <Input
+            label="Email"
+            name="email"
             type="email"
+            autoComplete="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="Email"
-            className="w-full p-2 border rounded bg-background"
             required
           />
-          <button type="submit" className="w-full py-2 bg-primary text-primary-foreground rounded font-medium">
+          <Button type="submit" className="w-full" isLoading={requestPending}>
             Send reset email
-          </button>
+          </Button>
         </form>
 
         <form onSubmit={handleConfirm} className="space-y-3">
-          <h3 className="font-medium">2. Confirm reset</h3>
-          <input
-            type="text"
+          <h2 className="text-sm font-semibold">2. Confirm reset</h2>
+          <Input
+            label="Reset token"
+            name="resetToken"
             value={token}
             onChange={(e) => setToken(e.target.value)}
-            placeholder="Reset token"
-            className="w-full p-2 border rounded bg-background"
             required
           />
-          <input
+          <Input
+            label="New password"
+            name="newPassword"
             type="password"
+            autoComplete="new-password"
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
-            placeholder="New password"
             minLength={6}
-            className="w-full p-2 border rounded bg-background"
             required
           />
-          <button type="submit" className="w-full py-2 border rounded font-medium hover:bg-accent transition-colors">
+          <Button type="submit" variant="secondary" className="w-full" isLoading={confirmPending}>
             Update password
-          </button>
+          </Button>
         </form>
+
+        <p className="text-center text-sm text-muted-foreground">
+          <Link to="/login" className="font-medium text-primary hover:underline">
+            Back to sign in
+          </Link>
+        </p>
       </div>
     </div>
   );
-};
+}

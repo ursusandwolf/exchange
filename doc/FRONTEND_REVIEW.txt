@@ -2,7 +2,7 @@
  FRONTEND REVIEW — status after fixes (2026-11-02)
 ================================================================================
 
-## Вердикт: ✅ P0/P1/P2 з рев’ю закриті + UI desk polish
+## Вердикт: ✅ P0/P1/P2 закриті; leftover polish теж зроблено
 
 ### Fixed
 - Shared STOMP broker (`shared/ws`) — один WS на app
@@ -10,18 +10,17 @@
 - API logout лише на 401 (не 403)
 - Symbol switcher (BTC/USDT, ETH/USDT)
 - Typed API DTOs; Portfolio/history без `any`
-- Login/Register: Link + htmlFor + shared Input/Button
+- Login/Register/ChangePassword/Reset: Link + htmlFor + shared Input/Button
 - shared/ui: Button, Input, Panel, EmptyState
 - PlaceOrder → usePlaceOrder hook
 - OrderBook/Chart/RecentTrades empty/error/loading
-- Admin role toggle confirm
+- Admin: shared Panel/EmptyState/Input/Button + role confirm
 - vitest script + OrderBook test
 - UI: sticky header, panel chrome, symbol chips, EN copy, focus rings
 
-### Remaining (non-blocking)
+### Remaining (non-blocking / needs backend)
 - JWT досі в localStorage (учбовий trade-off; httpOnly cookie = backend change)
-- AdminPage ще має локальні Panel/EmptyState хелпери (можна злити пізніше)
-- ChangePassword/Reset можна теж перевести на shared Input
+- Sprint 4.1: wire DTO лишаються String/BigDecimal (стабільність JSON; без явного ТЗ не чіпаємо)
 
 ### Verify
   cd frontend && npm run build && npm test && npm run dev
