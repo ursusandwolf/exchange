@@ -1,16 +1,22 @@
 import { Link, Outlet } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
+import { api } from '../shared/api';
 import { useAuthStore } from '../entities/user';
 import { Button } from '../shared/ui';
 
 export function Layout() {
-  const token = useAuthStore((state) => state.token);
+  const authenticated = useAuthStore((state) => state.authenticated);
   const username = useAuthStore((state) => state.username);
   const admin = useAuthStore((state) => state.admin);
   const logout = useAuthStore((state) => state.logout);
   const queryClient = useQueryClient();
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await api.post('/auth/logout');
+    } catch {
+      // clear local session even if cookie clear fails
+    }
     queryClient.clear();
     logout();
   };
@@ -23,7 +29,7 @@ export function Layout() {
             Gemini Exchange
           </Link>
           <nav className="flex items-center gap-2 sm:gap-3" aria-label="Account">
-            {token ? (
+            {authenticated ? (
               <>
                 <span className="hidden text-sm text-muted-foreground sm:inline">{username}</span>
                 {admin ? (

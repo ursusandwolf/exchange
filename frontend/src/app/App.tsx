@@ -11,12 +11,13 @@ import { ChangePasswordPage } from '../pages/ChangePasswordPage';
 import { AdminPage } from '../pages/AdminPage';
 import { ResetPasswordPage } from '../pages/ResetPasswordPage';
 import { useAuthStore } from '../entities/user/model/authStore';
-import { setupResponseInterceptors } from '../shared/api/base';
+import api, { setupResponseInterceptors } from '../shared/api/base';
 import { queryClient } from '../shared/api/queryClient';
 
 setupResponseInterceptors(() => {
   queryClient.clear();
   useAuthStore.getState().logout();
+  void api.post('/auth/logout').catch(() => undefined);
 });
 
 export function App() {

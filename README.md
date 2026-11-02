@@ -59,14 +59,17 @@ npm run dev
 | H2 Console | http://localhost:8080/h2-console |
 | SPA | http://localhost:5173 |
 
-**Дефолтний admin:** `ADMIN_USERNAME` / `ADMIN_PASSWORD` (за замовчуванням `admin` / `admin123`).
+**Профілі:** default=`dev` (локальні секрети + H2 console). Для prod: `--spring.profiles.active=prod` + обовʼязкові `JWT_SECRET` / `ADMIN_PASSWORD`.
+
+**Дефолтний admin (лише `dev`):** `admin` / `admin123`.
 
 ### Змінні середовища
 
 | Змінна | Призначення | Default |
 |--------|-------------|---------|
-| `JWT_SECRET` | Підпис JWT | dev-only secret |
-| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | Bootstrap admin | `admin` / `admin123` |
+| `JWT_SECRET` | Підпис JWT | лише в `dev`/`test` |
+| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | Bootstrap admin | лише в `dev` |
+| `ARBITRAGE_BOT_PASSWORD` | Логін бота (якщо порожньо — random UUID) | empty |
 | `PASSWORD_RESET_FRONTEND_URL` | Лінк у листі reset | `http://localhost:5173` |
 | `MARKET_DATA_BASE_URL` | Зовнішній market-data | `http://market-data-service` |
 

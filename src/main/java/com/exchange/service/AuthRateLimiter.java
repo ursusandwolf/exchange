@@ -50,8 +50,25 @@ public class AuthRateLimiter {
         assertAllowed("password-reset:" + normalized(clientKey) + ":" + normalized(email), passwordResetMaxAttempts, passwordResetWindow, "Too many password reset requests. Please try again later.");
     }
 
+    public void assertPasswordResetConfirmAllowed(String clientKey, String token) {
+        assertAllowed(
+                "password-reset-confirm:" + normalized(clientKey) + ":" + tokenPrefix(token),
+                passwordResetMaxAttempts,
+                passwordResetWindow,
+                "Too many password reset confirmations. Please try again later."
+        );
+    }
+
     public void clearLogin(String clientKey, String username) {
         windows.remove("login:" + normalized(clientKey) + ":" + normalized(username));
+    }
+
+    private String tokenPrefix(String token) {
+        if (token == null || token.isBlank()) {
+            return "-";
+        }
+        String trimmed = token.trim();
+        return trimmed.substring(0, Math.min(8, trimmed.length())).toLowerCase(Locale.ROOT);
     }
 
     private void assertAllowed(String key, int maxAttempts, Duration window, String message) {

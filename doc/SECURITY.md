@@ -82,17 +82,17 @@ Backend определяет пользователя через authenticated p
 
 ## 6. Хранение данных на клиенте
 
-Frontend использует `zustand` с `persist`, поэтому в `localStorage` сохраняются:
+JWT выдаётся в httpOnly cookie `EXCHANGE_TOKEN` (SameSite=Lax) и читается `JwtAuthenticationFilter`
+(cookie або `Authorization: Bearer` для сумісності).
 
-- `token`
+У `localStorage` (zustand persist) лишаються лише UI-поля:
+
+- `authenticated`
 - `username`
 - `userId`
+- `admin` (підказка для меню; `/admin` додатково перевіряється API)
 
-### Ограничения этого подхода
-
-- Любой JavaScript, работающий в origin приложения, может прочитать токен.
-- XSS в приложении приведет к компрометации сессии.
-- Это приемлемо только для учебного проекта или внутреннего стенда.
+XSS більше не читає JWT з storage; Bearer у JSON login/register — для API-клієнтів, SPA його не персистить.
 
 ## 7. Кеширование и переключение пользователя
 

@@ -1,8 +1,8 @@
 package com.exchange.config;
 
 import com.exchange.dto.AuthUser;
-import com.exchange.service.JwtService;
 import com.exchange.repository.UserRepository;
+import com.exchange.service.JwtService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -23,6 +23,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
     private final UserRepository userRepository;
+    private final AuthCookieService authCookieService;
 
     @Override
     protected void doFilterInternal(
@@ -30,16 +31,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             @NonNull HttpServletResponse response,
             @NonNull FilterChain filterChain
     ) throws ServletException, IOException {
-        final String authHeader = request.getHeader("Authorization");
-        final String jwt;
-        final String userId;
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+        String jwt = extractBearer(request);
+        if (jwt == null) {
+            jwt = authCookieService.read(request);
+        }
+        if (jwt == null) {
             filterChain.doFilter(request, response);
             return;
         }
-        jwt = authHeader.substring(7);
+
         try {
-            userId = jwtService.extractUserId(jwt);
+            String userId = jwtService.extractUserId(jwt);
             if (userId != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                 AuthUser userDetails = userRepository.findById(userId)
                         .map(AuthUser::from)
@@ -50,17 +52,22 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                             null,
                             userDetails.getAuthorities()
                     );
-                    authToken.setDetails(
-                            new WebAuthenticationDetailsSource().buildDetails(request)
-                    );
+                    authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(authToken);
                 }
             }
-        } catch (Exception e) {
-            // Если токен невалиден или пользователь не найден (UsernameNotFoundException),
-            // просто продолжаем цепочку фильтров без аутентификации.
-            // Spring Security вернет 403/401 позже, если эндпоинт защищен.
+        } catch (Exception ignored) {
+            // Invalid token → continue unauthenticated; secured endpoints reject later.
         }
         filterChain.doFilter(request, response);
+    }
+
+    private static String extractBearer(HttpServletRequest request) {
+        String authHeader = request.getHeader("Authorization");
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return null;
+        }
+        String token = authHeader.substring(7).trim();
+        return token.isEmpty() ? null : token;
     }
 }

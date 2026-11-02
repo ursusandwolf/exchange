@@ -1,0 +1,33 @@
+================================================================================
+ SECURITY AUDIT — exchange
+ Дата: 2026-11-02 | Plan: doc/VERIFY_AND_SECURITY_PLAN.md
+================================================================================
+
+## Verify
+  mvn test              → EXIT 0
+  frontend npm test     → EXIT 0
+  frontend npm build    → EXIT 0
+
+## Вердикт
+  Учбовий стенд: OK. P0/P1/P2 з аудиту — закриті.
+
+## Fixed P0
+  - ArbitrageBot: ARBITRAGE_BOT_PASSWORD або random UUID
+  - H2 console off за замовч.; permitAll лише якщо enabled
+  - Secrets defaults лише в dev; ProdSecurityGuard на prod
+  - Reset mail: token не логується
+
+## Fixed P1/P2
+  - JWT httpOnly cookie EXCHANGE_TOKEN + filter cookie|Bearer; SPA не персистить token
+  - WS origins whitelist (WS_ALLOWED_ORIGIN_PATTERNS)
+  - Reset link #token= + FE читає hash і чистить URL
+  - Rate limit на password-reset/confirm
+  - ClientIpResolver + TRUST_FORWARDED_HEADERS (prod)
+  - setAdmin → incrementTokenVersion
+  - RequireAdmin → probe GET /admin/stats
+
+## Residual (свідомо)
+  - AuthResponse.token ще в JSON (сумісність API); SPA його не зберігає
+  - In-memory rate limit (не multi-node)
+  - Нема MFA / refresh-token rotation
+================================================================================

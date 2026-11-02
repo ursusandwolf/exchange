@@ -21,7 +21,7 @@ export function RegisterPage() {
     setError('');
     try {
       const response = await api.post<AuthResponse>('/auth/register', { username, email, password });
-      setAuth(response.data.token, response.data.username, response.data.userId, response.data.admin);
+      setAuth(response.data.username, response.data.userId, response.data.admin);
       navigate('/');
     } catch (err: unknown) {
       if (err instanceof AxiosError) {

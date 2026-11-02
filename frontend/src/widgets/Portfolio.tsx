@@ -9,23 +9,23 @@ import { cn } from '../shared/lib/cn';
 
 export function Portfolio() {
   const [activeTab, setActiveTab] = useState<'assets' | 'history'>('assets');
-  const token = useAuthStore((state) => state.token);
+  const authenticated = useAuthStore((state) => state.authenticated);
   const userId = useAuthStore((state) => state.userId);
 
   const { data: portfolio, isLoading: isPortfolioLoading, isError: isPortfolioError } = useQuery({
     queryKey: ['portfolio', userId],
     queryFn: async () => (await api.get<PortfolioResponse>('/user/portfolio')).data,
-    enabled: Boolean(token && userId),
+    enabled: Boolean(authenticated && userId),
     refetchInterval: 5000,
   });
 
   const { data: history, isLoading: isHistoryLoading, isError: isHistoryError } = useQuery({
     queryKey: ['wallet-history', userId],
     queryFn: async () => (await api.get<TransactionRecordResponse[]>('/user/history')).data,
-    enabled: Boolean(token && userId && activeTab === 'history'),
+    enabled: Boolean(authenticated && userId && activeTab === 'history'),
   });
 
-  if (!token) {
+  if (!authenticated) {
     return (
       <EmptyState
         title="Sign in to view portfolio"

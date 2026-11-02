@@ -14,10 +14,10 @@ public class AdminBootstrap implements CommandLineRunner {
 
     private final AccountService accountService;
 
-    @Value("${app.admin.bootstrap.username:admin}")
+    @Value("${app.admin.bootstrap.username}")
     private String adminUsername;
 
-    @Value("${app.admin.bootstrap.password:admin123}")
+    @Value("${app.admin.bootstrap.password}")
     private String adminPassword;
 
     @Override

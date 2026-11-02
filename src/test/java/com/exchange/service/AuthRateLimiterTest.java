@@ -36,4 +36,14 @@ class AuthRateLimiterTest {
         assertThatCode(() -> limiter.assertLoginAllowed("127.0.0.1", "alice"))
                 .doesNotThrowAnyException();
     }
+
+    @Test
+    void shouldRateLimitPasswordResetConfirm() {
+        limiter.assertPasswordResetConfirmAllowed("127.0.0.1", "abcdefghij");
+        limiter.assertPasswordResetConfirmAllowed("127.0.0.1", "abcdefghij");
+
+        assertThatThrownBy(() -> limiter.assertPasswordResetConfirmAllowed("127.0.0.1", "abcdefghij"))
+                .isInstanceOf(TooManyRequestsException.class)
+                .hasMessageContaining("password reset confirmations");
+    }
 }

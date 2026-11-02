@@ -2,30 +2,37 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 interface AuthState {
-  token: string | null;
+  /** Session marker only — JWT lives in httpOnly cookie, not here. */
+  authenticated: boolean;
   username: string | null;
   userId: string | null;
   admin: boolean;
-  setAuth: (token: string, username: string, userId: string, admin: boolean) => void;
+  setAuth: (username: string, userId: string, admin: boolean) => void;
   logout: () => void;
 }
 
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
-      token: null,
+      authenticated: false,
       username: null,
       userId: null,
       admin: false,
-      setAuth: (token, username, userId, admin) => {
-        set({ token, username, userId, admin });
+      setAuth: (username, userId, admin) => {
+        set({ authenticated: true, username, userId, admin });
       },
       logout: () => {
-        set({ token: null, username: null, userId: null, admin: false });
+        set({ authenticated: false, username: null, userId: null, admin: false });
       },
     }),
     {
       name: 'auth-storage',
+      partialize: (state) => ({
+        authenticated: state.authenticated,
+        username: state.username,
+        userId: state.userId,
+        admin: state.admin,
+      }),
     }
   )
 );

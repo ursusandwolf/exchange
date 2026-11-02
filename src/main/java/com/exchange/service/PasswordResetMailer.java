@@ -23,10 +23,11 @@ public class PasswordResetMailer {
 
     public void sendResetEmail(String email, String token) {
         JavaMailSender mailSender = mailSenderProvider.getIfAvailable();
-        String resetLink = frontendUrl + "/reset-password?token=" + token;
+        // Fragment keeps the token out of server access logs / Referer for same-origin navigations.
+        String resetLink = frontendUrl + "/reset-password#token=" + token;
 
         if (mailSender == null || mailHost == null || mailHost.isBlank()) {
-            log.info("Password reset requested for {}, token: {}", email, token);
+            log.info("Password reset requested for {} (mail disabled; reset token not logged)", maskEmail(email));
             return;
         }
 
@@ -35,5 +36,16 @@ public class PasswordResetMailer {
         message.setSubject("Password reset");
         message.setText("Use this link to reset your password: " + resetLink);
         mailSender.send(message);
+    }
+
+    private static String maskEmail(String email) {
+        if (email == null || email.isBlank()) {
+            return "(blank)";
+        }
+        int at = email.indexOf('@');
+        if (at <= 1) {
+            return "***";
+        }
+        return email.charAt(0) + "***" + email.substring(at);
     }
 }

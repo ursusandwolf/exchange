@@ -12,7 +12,7 @@ export function ChangePasswordPage() {
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
   const navigate = useNavigate();
-  const token = useAuthStore((state) => state.token);
+  const authenticated = useAuthStore((state) => state.authenticated);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -39,7 +39,7 @@ export function ChangePasswordPage() {
     }
   };
 
-  if (!token) {
+  if (!authenticated) {
     return <Navigate to="/login" replace />;
   }
 

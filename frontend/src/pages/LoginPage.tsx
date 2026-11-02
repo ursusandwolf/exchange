@@ -22,7 +22,7 @@ export function LoginPage() {
     setError('');
     try {
       const response = await api.post<AuthResponse>('/auth/login', { username, password });
-      setAuth(response.data.token, response.data.username, response.data.userId, response.data.admin);
+      setAuth(response.data.username, response.data.userId, response.data.admin);
       navigate(from, { replace: true });
     } catch (err: unknown) {
       if (err instanceof AxiosError) {

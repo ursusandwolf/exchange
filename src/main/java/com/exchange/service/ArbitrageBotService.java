@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -31,6 +32,8 @@ public class ArbitrageBotService {
     private String symbol;
     @Value("${app.arbitrage.enabled:true}")
     private boolean enabled;
+    @Value("${app.arbitrage.bot-password:}")
+    private String botPassword;
     private String botUserId;
     private InstrumentId baseAsset;
     private InstrumentId quoteAsset;
@@ -38,12 +41,7 @@ public class ArbitrageBotService {
     @jakarta.annotation.PostConstruct
     public void init() {
         User bot = accountService.findByUsername(BOT_USERNAME)
-                .orElseGet(() -> {
-                    User u = accountService.registerUser(BOT_USERNAME, "bot_password_123");
-                    walletService.deposit(u.getId(), "USDT", new BigDecimal("1000000"));
-                    walletService.deposit(u.getId(), "BTC", new BigDecimal("10"));
-                    return u;
-                });
+                .orElseGet(this::createBotUser);
         this.botUserId = bot.getId();
         String[] parts = symbol.split("/", 2);
         if (parts.length != 2) {
@@ -52,6 +50,16 @@ public class ArbitrageBotService {
         this.baseAsset = new InstrumentId(parts[0]);
         this.quoteAsset = new InstrumentId(parts[1]);
         log.info("Arbitrage bot initialized with user ID: {}", botUserId);
+    }
+
+    private User createBotUser() {
+        String password = (botPassword == null || botPassword.isBlank())
+                ? UUID.randomUUID().toString()
+                : botPassword;
+        User user = accountService.registerUser(BOT_USERNAME, password);
+        walletService.deposit(user.getId(), "USDT", new BigDecimal("1000000"));
+        walletService.deposit(user.getId(), "BTC", new BigDecimal("10"));
+        return user;
     }
 
     @Scheduled(fixedRate = 10000) // Check every 10 seconds

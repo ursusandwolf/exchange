@@ -7,6 +7,8 @@ import com.exchange.dto.RegisterRequest;
 import com.exchange.mapper.UserMapper;
 import com.exchange.model.User;
 import com.exchange.repository.UserRepository;
+import com.exchange.config.AuthCookieService;
+import com.exchange.config.ClientIpResolver;
 import com.exchange.config.JwtAuthenticationFilter;
 import com.exchange.service.AccountService;
 import com.exchange.service.AuthRateLimiter;
@@ -68,8 +70,15 @@ class AuthControllerTest {
     @MockBean
     private AuthRateLimiter authRateLimiter;
 
+    @MockBean
+    private ClientIpResolver clientIpResolver;
+
+    @MockBean
+    private AuthCookieService authCookieService;
+
     @Test
     void login_returns401_onBadCredentials() throws Exception {
+        given(clientIpResolver.resolve(any())).willReturn("127.0.0.1");
         doThrow(new BadCredentialsException("Bad credentials"))
                 .when(authenticationManager)
                 .authenticate(any());
@@ -84,6 +93,7 @@ class AuthControllerTest {
 
     @Test
     void login_returns429_whenRateLimited() throws Exception {
+        given(clientIpResolver.resolve(any())).willReturn("127.0.0.1");
         doThrow(new com.exchange.exception.TooManyRequestsException("Too many login attempts. Please try again later."))
                 .when(authRateLimiter)
                 .assertLoginAllowed(anyString(), anyString());
@@ -98,6 +108,7 @@ class AuthControllerTest {
 
     @Test
     void register_returnsToken() throws Exception {
+        given(clientIpResolver.resolve(any())).willReturn("127.0.0.1");
         User user = new User("alice", "encoded-password");
         given(accountService.registerUser(eq("alice"), eq("alice@example.com"), eq("secret123"))).willReturn(user);
         given(jwtService.generateToken(user.getId(), "alice", user.getTokenVersion())).willReturn("token-value");
@@ -117,6 +128,7 @@ class AuthControllerTest {
 
     @Test
     void passwordResetRequest_returnsAccepted() throws Exception {
+        given(clientIpResolver.resolve(any())).willReturn("127.0.0.1");
         PasswordResetRequest request = new PasswordResetRequest("alice@example.com");
 
         mockMvc.perform(post("/api/auth/password-reset/request")
@@ -127,6 +139,7 @@ class AuthControllerTest {
 
     @Test
     void passwordResetConfirm_returnsNoContent() throws Exception {
+        given(clientIpResolver.resolve(any())).willReturn("127.0.0.1");
         PasswordResetConfirmRequest request = new PasswordResetConfirmRequest("reset-token", "newpass123");
 
         mockMvc.perform(post("/api/auth/password-reset/confirm")

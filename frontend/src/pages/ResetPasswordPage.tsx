@@ -6,6 +6,14 @@ import { api } from '../shared/api';
 import { useAuthStore } from '../entities/user';
 import { Button, Input } from '../shared/ui';
 
+function readTokenFromHash(): string {
+  const hash = window.location.hash.startsWith('#')
+    ? window.location.hash.slice(1)
+    : window.location.hash;
+  const params = new URLSearchParams(hash);
+  return params.get('token') ?? '';
+}
+
 export function ResetPasswordPage() {
   const [email, setEmail] = useState('');
   const [token, setToken] = useState('');
@@ -16,15 +24,20 @@ export function ResetPasswordPage() {
   const [confirmPending, setConfirmPending] = useState(false);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const isAuthenticated = useAuthStore((state) => !!state.token);
-
-  const initialToken = searchParams.get('token') ?? '';
+  const isAuthenticated = useAuthStore((state) => state.authenticated);
 
   useEffect(() => {
-    if (initialToken) {
-      setToken(initialToken);
+    const fromHash = readTokenFromHash();
+    const fromQuery = searchParams.get('token') ?? '';
+    const initial = fromHash || fromQuery;
+    if (initial) {
+      setToken(initial);
     }
-  }, [initialToken]);
+    if (fromHash || fromQuery) {
+      // Drop token from address bar after reading (query legacy + fragment).
+      window.history.replaceState(null, '', '/reset-password');
+    }
+  }, [searchParams]);
 
   const handleRequest = async (event: React.FormEvent) => {
     event.preventDefault();

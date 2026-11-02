@@ -4,9 +4,9 @@ import { PlaceOrderForm } from '../features/place-order';
 import { EmptyState } from '../shared/ui';
 
 export function TradingForm({ symbol }: { symbol: string }) {
-  const token = useAuthStore((state) => state.token);
+  const authenticated = useAuthStore((state) => state.authenticated);
 
-  if (!token) {
+  if (!authenticated) {
     return (
       <EmptyState
         title="Login to trade"

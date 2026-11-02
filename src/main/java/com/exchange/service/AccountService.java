@@ -68,7 +68,10 @@ public class AccountService {
     public User setAdmin(String userId, boolean admin) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден: " + userId));
-        user.setAdmin(admin);
+        if (user.isAdmin() != admin) {
+            user.setAdmin(admin);
+            user.incrementTokenVersion();
+        }
         return userRepository.saveAndFlush(user);
     }
 
