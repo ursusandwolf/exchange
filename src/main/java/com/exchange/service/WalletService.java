@@ -1,5 +1,6 @@
 package com.exchange.service;
 
+import com.alex.fin.core.domain.common.ValidationUtils;
 import com.exchange.model.TransactionRecord;
 import com.exchange.model.User;
 import com.exchange.model.Wallet;
@@ -55,8 +56,9 @@ public class WalletService {
                         WalletMutation mutation) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден: " + userId));
-        mutation.apply(user.getWallet(), asset, walletAmount);
-        recordTransaction(userId, asset, auditAmount, type, description);
+        String normalizedAsset = ValidationUtils.normalize(asset, "asset");
+        mutation.apply(user.getWallet(), normalizedAsset, walletAmount);
+        recordTransaction(userId, normalizedAsset, auditAmount, type, description);
         userRepository.save(user);
     }
 
@@ -74,6 +76,11 @@ public class WalletService {
     @Transactional(readOnly = true)
     public BigDecimal getBalance(String userId, String asset) {
         return getWallet(userId).getBalance(asset);
+    }
+
+    @Transactional(readOnly = true)
+    public BigDecimal getReserved(String userId, String asset) {
+        return getWallet(userId).getReserved(asset);
     }
 
     public List<TransactionRecord> getHistory(String userId) {

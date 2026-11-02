@@ -1,5 +1,7 @@
 package com.exchange.model;
 
+import com.alex.fin.core.domain.common.Money;
+import com.alex.fin.core.domain.common.ValidationUtils;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -46,49 +48,58 @@ public class Wallet {
      * Зачисление средств на кошелёк.
      */
     public void credit(String assetSymbol, BigDecimal amount) {
-        validateAmount(amount);
-        balances.merge(assetSymbol, amount, BigDecimal::add);
+        ValidationUtils.validatePositive(amount, "amount");
+        String asset = ValidationUtils.normalize(assetSymbol, "asset");
+        balances.merge(asset, amount, BigDecimal::add);
+    }
+
+    /** Typed credit via fin-core {@link Money}; storage remains BigDecimal maps. */
+    public void credit(Money money) {
+        credit(money.currency().value(), money.amount());
     }
 
     /**
      * Резервирование средств под ордер.
      */
     public void reserve(String assetSymbol, BigDecimal amount) {
-        validateAmount(amount);
-        BigDecimal balance = balances.getOrDefault(assetSymbol, BigDecimal.ZERO);
+        ValidationUtils.validatePositive(amount, "amount");
+        String asset = ValidationUtils.normalize(assetSymbol, "asset");
+        BigDecimal balance = balances.getOrDefault(asset, BigDecimal.ZERO);
         if (balance.compareTo(amount) < 0) {
             throw new IllegalArgumentException(
-                "Недостаточно доступных средств " + assetSymbol + " для резервирования. Баланс: " + balance + ", требуется: " + amount);
+                "Недостаточно доступных средств " + asset + " для резервирования. Баланс: " + balance + ", требуется: " + amount);
         }
-        balances.put(assetSymbol, balance.subtract(amount));
-        reserved.merge(assetSymbol, amount, BigDecimal::add);
+        balances.put(asset, balance.subtract(amount));
+        reserved.merge(asset, amount, BigDecimal::add);
     }
 
     /**
      * Освобождение зарезервированных средств.
      */
     public void unreserve(String assetSymbol, BigDecimal amount) {
-        validateAmount(amount);
-        BigDecimal reservedAmount = reserved.getOrDefault(assetSymbol, BigDecimal.ZERO);
+        ValidationUtils.validatePositive(amount, "amount");
+        String asset = ValidationUtils.normalize(assetSymbol, "asset");
+        BigDecimal reservedAmount = reserved.getOrDefault(asset, BigDecimal.ZERO);
         if (reservedAmount.compareTo(amount) < 0) {
             throw new IllegalArgumentException(
-                "Недостаточно зарезервированных средств " + assetSymbol + ". Зарезервировано: " + reservedAmount + ", требуется освободить: " + amount);
+                "Недостаточно зарезервированных средств " + asset + ". Зарезервировано: " + reservedAmount + ", требуется освободить: " + amount);
         }
-        reserved.put(assetSymbol, reservedAmount.subtract(amount));
-        balances.merge(assetSymbol, amount, BigDecimal::add);
+        reserved.put(asset, reservedAmount.subtract(amount));
+        balances.merge(asset, amount, BigDecimal::add);
     }
 
     /**
      * Списывание зарезервированных средств.
      */
     public void deductReserved(String assetSymbol, BigDecimal amount) {
-        validateAmount(amount);
-        BigDecimal reservedAmount = reserved.getOrDefault(assetSymbol, BigDecimal.ZERO);
+        ValidationUtils.validatePositive(amount, "amount");
+        String asset = ValidationUtils.normalize(assetSymbol, "asset");
+        BigDecimal reservedAmount = reserved.getOrDefault(asset, BigDecimal.ZERO);
         if (reservedAmount.compareTo(amount) < 0) {
             throw new IllegalArgumentException(
-                "Недостаточно зарезервированных средств " + assetSymbol + " для списания. Зарезервировано: " + reservedAmount + ", требуется: " + amount);
+                "Недостаточно зарезервированных средств " + asset + " для списания. Зарезервировано: " + reservedAmount + ", требуется: " + amount);
         }
-        reserved.put(assetSymbol, reservedAmount.subtract(amount));
+        reserved.put(asset, reservedAmount.subtract(amount));
     }
 
     /**
@@ -103,11 +114,5 @@ public class Wallet {
      */
     public BigDecimal getReserved(String assetSymbol) {
         return reserved.getOrDefault(assetSymbol, BigDecimal.ZERO);
-    }
-
-    private void validateAmount(BigDecimal amount) {
-        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new IllegalArgumentException("Сумма должна быть положительной");
-        }
     }
 }

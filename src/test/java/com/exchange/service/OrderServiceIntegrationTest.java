@@ -61,4 +61,23 @@ class OrderServiceIntegrationTest {
         User feeCollector = userRepository.findByUsername(OrderService.SYSTEM_FEE_USER).orElseThrow();
         assertThat(walletService.getBalance(feeCollector.getId(), "USDT")).isGreaterThan(BigDecimal.ZERO);
     }
+
+    @Test
+    void partialFill_shouldKeepReserveEqualToRemainingSellQty() {
+        User seller = accountService.registerUser("Seller_" + System.currentTimeMillis(), "password123");
+        User buyer = accountService.registerUser("Buyer_" + System.currentTimeMillis(), "password123");
+        walletService.deposit(seller.getId(), "ETH", new BigDecimal("2"));
+        walletService.deposit(buyer.getId(), "USDT", new BigDecimal("100000"));
+
+        orderService.submitOrder(seller, new OrderRequest(
+                "ETH", "USDT", Side.SELL, OrderType.LIMIT,
+                new BigDecimal("2"), new BigDecimal("3000"), null, null));
+
+        orderService.submitOrder(buyer, new OrderRequest(
+                "ETH", "USDT", Side.BUY, OrderType.LIMIT,
+                new BigDecimal("1"), new BigDecimal("3000"), null, null));
+
+        assertThat(walletService.getReserved(seller.getId(), "ETH"))
+                .isEqualByComparingTo("1");
+    }
 }

@@ -7,6 +7,9 @@ All notable changes to this project will be documented in this file.
 ### Added
 - **Docs**: refreshed README, Architecture, Documentation; full Mermaid UML (class / sequence / ER).
 - **Review**: `doc/REVIEW.md` checklist + GitHub PR template; `main` synced as canonical branch.
+- **Sprint 2**: `FeeService` on `Percent`; Wallet `ValidationUtils` + `credit(Money)`.
+- **Sprint 3.4**: MDS client timeouts + Resilience4j circuit breaker; bot `InstrumentId`.
+- **Hardening**: `adjustReservedAmount` after partial fills; trigger/cancel book sync only `afterCommit`.
 
 ## [0.1.0] - 2026-06-03
 

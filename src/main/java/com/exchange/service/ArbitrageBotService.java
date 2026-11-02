@@ -1,5 +1,6 @@
 package com.exchange.service;
 
+import com.alex.fin.core.domain.common.InstrumentId;
 import com.exchange.dto.OrderRequest;
 import com.exchange.engine.OrderBook;
 import com.exchange.enums.OrderType;
@@ -28,7 +29,11 @@ public class ArbitrageBotService {
     private static final BigDecimal THRESHOLD_PERCENT = new BigDecimal("0.005"); // 0.5% deviation
     @Value("${app.arbitrage.symbol:BTC/USDT}")
     private String symbol;
+    @Value("${app.arbitrage.enabled:true}")
+    private boolean enabled;
     private String botUserId;
+    private InstrumentId baseAsset;
+    private InstrumentId quoteAsset;
 
     @jakarta.annotation.PostConstruct
     public void init() {
@@ -40,11 +45,20 @@ public class ArbitrageBotService {
                     return u;
                 });
         this.botUserId = bot.getId();
+        String[] parts = symbol.split("/", 2);
+        if (parts.length != 2) {
+            throw new IllegalStateException("Invalid arbitrage symbol: " + symbol);
+        }
+        this.baseAsset = new InstrumentId(parts[0]);
+        this.quoteAsset = new InstrumentId(parts[1]);
         log.info("Arbitrage bot initialized with user ID: {}", botUserId);
     }
 
     @Scheduled(fixedRate = 10000) // Check every 10 seconds
     public void runArbitrage() {
+        if (!enabled) {
+            return;
+        }
         BigDecimal externalPrice = oracleService.getExternalPrice(symbol);
         if (externalPrice == null) return;
 
@@ -80,11 +94,8 @@ public class ArbitrageBotService {
     private void executeTrade(Side side, BigDecimal quantity, BigDecimal price) {
         try {
             User bot = accountService.findById(botUserId).orElseThrow();
-            String[] parts = symbol.split("/", 2);
-            if (parts.length != 2) {
-                throw new IllegalStateException("Invalid arbitrage symbol: " + symbol);
-            }
-            OrderRequest request = new OrderRequest(parts[0], parts[1], side, OrderType.LIMIT, quantity, price, null, null);
+            OrderRequest request = new OrderRequest(
+                    baseAsset.value(), quoteAsset.value(), side, OrderType.LIMIT, quantity, price, null, null);
             orderService.submitOrder(bot, request);
         } catch (Exception e) {
             log.error("Bot trade failed: {}", e.getMessage());

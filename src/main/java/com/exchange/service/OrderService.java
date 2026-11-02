@@ -27,6 +27,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -77,7 +78,8 @@ public class OrderService {
                                                     price, triggerPrice);
                     orderRepository.save(order);
                     validateAndReserve(user.getId(), order);
-                    matchingManager.addTriggeredOrder(order);
+                    Order persisted = order;
+                    runAfterCommit(() -> matchingManager.addTriggeredOrder(persisted));
                     log.info("Trigger order {} placed for user {}", order.getId(), user.getUsername());
                     return List.of();
                 });
@@ -146,8 +148,12 @@ public class OrderService {
                 orderRepository.save(takeProfitOrder);
                 orderRepository.save(stopLossOrder);
 
-                matchingManager.addTriggeredOrder(takeProfitOrder);
-                matchingManager.addTriggeredOrder(stopLossOrder);
+                Order tp = takeProfitOrder;
+                Order sl = stopLossOrder;
+                runAfterCommit(() -> {
+                    matchingManager.addTriggeredOrder(tp);
+                    matchingManager.addTriggeredOrder(sl);
+                });
 
                 log.info("OCO group {} placed for user {}", groupId, user.getUsername());
                 return new OcoOrderResponse(groupId, List.of(takeProfitOrder.getId(), stopLossOrder.getId()));
@@ -184,10 +190,12 @@ public class OrderService {
             order.cancel();
         }
 
-        if (!order.isActive()) {
+        if (order.isActive()) {
+            adjustReservedAmount(userId, order);
+        } else {
             releaseUnusedReserve(userId, order);
         }
-        
+
         orderRepository.save(order);
         
         // After trade, check if any triggered orders should be activated
@@ -202,13 +210,19 @@ public class OrderService {
     }
 
     private void registerPostCommitTriggerCheck(String symbol, BigDecimal lastPrice) {
+        runAfterCommit(() -> checkAndActivateTriggeredOrders(symbol, lastPrice));
+    }
+
+    private void runAfterCommit(Runnable action) {
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
-                    checkAndActivateTriggeredOrders(symbol, lastPrice);
+                    action.run();
                 }
             });
+        } else {
+            action.run();
         }
     }
 
@@ -281,11 +295,13 @@ public class OrderService {
                 if (discardRemainingMarketOrder) {
                     executableOrder.cancel();
                 }
-                
-                if (!executableOrder.isActive()) {
+
+                if (executableOrder.isActive()) {
+                    adjustReservedAmount(executableOrder.getUserId(), executableOrder);
+                } else {
                     releaseUnusedReserve(executableOrder.getUserId(), executableOrder);
                 }
-                
+
                 orderRepository.save(executableOrder);
                 return null;
             });
@@ -303,24 +319,30 @@ public class OrderService {
                 order.getType() == OrderType.LIMIT || order.getType() == OrderType.MARKET
         );
 
+        List<Runnable> memoryOps = new ArrayList<>();
         for (Order sibling : siblings) {
             if (excluded.contains(sibling.getId()) || !sibling.isActive()) {
                 continue;
             }
 
             if (sibling.getType() == OrderType.LIMIT || sibling.getType() == OrderType.MARKET) {
-                OrderBook orderBook = matchingManager.getOrderBookBySymbol(sibling.getSymbol());
-                if (orderBook != null) {
-                    orderBook.removeOrder(sibling);
-                }
+                Order toRemove = sibling;
+                memoryOps.add(() -> {
+                    OrderBook orderBook = matchingManager.getOrderBookBySymbol(toRemove.getSymbol());
+                    if (orderBook != null) {
+                        orderBook.removeOrder(toRemove);
+                    }
+                });
                 releaseUnusedReserve(userId, sibling);
             } else {
-                matchingManager.removeTriggeredOrder(sibling.getId());
+                String orderId = sibling.getId();
+                memoryOps.add(() -> matchingManager.removeTriggeredOrder(orderId));
             }
 
             sibling.cancel();
             orderRepository.save(sibling);
         }
+        runAfterCommit(() -> memoryOps.forEach(Runnable::run));
 
         return activated;
     }
@@ -348,23 +370,18 @@ public class OrderService {
     }
 
     private void registerPostCommitSync(MatchResult result, OrderBook orderBook) {
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override
-                public void afterCommit() {
-                    for (Order toRemove : result.getOrdersToRemove()) {
-                        orderBook.removeOrder(toRemove);
-                    }
-                    if (result.getRemainingOrder() != null
-                            && result.getRemainingOrder().isActive()
-                            && result.getRemainingOrder().getType() != OrderType.MARKET) {
-                        orderBook.addOrder(result.getRemainingOrder());
-                    }
-                    result.getTrades().forEach(marketDataService::broadcastTrade);
-                    marketDataService.broadcastOrderBookUpdate(orderBook);
-                }
-            });
-        }
+        runAfterCommit(() -> {
+            for (Order toRemove : result.getOrdersToRemove()) {
+                orderBook.removeOrder(toRemove);
+            }
+            if (result.getRemainingOrder() != null
+                    && result.getRemainingOrder().isActive()
+                    && result.getRemainingOrder().getType() != OrderType.MARKET) {
+                orderBook.addOrder(result.getRemainingOrder());
+            }
+            result.getTrades().forEach(marketDataService::broadcastTrade);
+            marketDataService.broadcastOrderBookUpdate(orderBook);
+        });
     }
 
     private void settleTrade(Trade trade) {
@@ -419,6 +436,32 @@ public class OrderService {
         }
     }
 
+    /**
+     * Aligns wallet reserve with remaining active size after fills (releases excess buffer/fees).
+     */
+    private void adjustReservedAmount(String userId, Order order) {
+        if (!order.isActive()) {
+            return;
+        }
+        BigDecimal needed;
+        if (order.getSide() == Side.SELL) {
+            needed = order.getRemainingQuantity();
+        } else if (order.getPrice() != null) {
+            BigDecimal notional = order.getRemainingQuantity().multiply(order.getPrice().value());
+            needed = notional.add(feeService.calculateTakerFee(notional));
+        } else {
+            return;
+        }
+
+        BigDecimal current = order.getReservedAmount();
+        BigDecimal excess = current.subtract(needed);
+        if (excess.compareTo(BigDecimal.ZERO) > 0) {
+            String asset = order.getSide() == Side.BUY ? order.getQuoteAsset().value() : order.getBaseAsset().value();
+            walletService.unreserve(userId, asset, excess, "Adjust reserve for order " + order.getId());
+            order.setReservedAmount(needed);
+        }
+    }
+
     public boolean cancelOrder(String userId, String orderId) {
         String symbol;
         {
@@ -451,14 +494,17 @@ public class OrderService {
         order.cancel();
         releaseUnusedReserve(userId, order);
 
-        if (order.getType() == OrderType.STOP_LOSS || order.getType() == OrderType.TAKE_PROFIT) {
-            matchingManager.removeTriggeredOrder(order.getId());
-        } else {
-            OrderBook orderBook = matchingManager.getOrderBookBySymbol(order.getSymbol());
-            if (orderBook != null) {
-                orderBook.removeOrder(order);
+        Order cancelled = order;
+        runAfterCommit(() -> {
+            if (cancelled.getType() == OrderType.STOP_LOSS || cancelled.getType() == OrderType.TAKE_PROFIT) {
+                matchingManager.removeTriggeredOrder(cancelled.getId());
+            } else {
+                OrderBook orderBook = matchingManager.getOrderBookBySymbol(cancelled.getSymbol());
+                if (orderBook != null) {
+                    orderBook.removeOrder(cancelled);
+                }
             }
-        }
+        });
 
         orderRepository.save(order);
 

@@ -33,8 +33,8 @@ cd frontend && npm i && npm run dev
 ```
 
 ## Стан спринтів
-Phase 1–6 + Sprint 1 (fin-core types) ≈ done.  
-Далі: Sprint 2 (Money types) / Sprint 3 (MDS resilience) / fix partial-fill reserve.
+Phase 1–6 + Sprint 1–3 ≈ done (див. `doc/MIGRATION_PLAN.md`).  
+Залишок Sprint 4.1: typed DTO в API (опційно). Hardening: `adjustReservedAmount` + afterCommit sync — зроблено.
 
 ## Не робити без явного ТЗ
 Мікросервіси, Kafka, rewrite frontend, зміна публічних API контрактів, force-push.

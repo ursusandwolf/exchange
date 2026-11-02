@@ -77,6 +77,11 @@
             <artifactId>spring-boot-starter-mail</artifactId>
         </dependency>
         <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-circuitbreaker</artifactId>
+            <version>2.2.0</version>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
@@ -121,6 +126,7 @@
                 <configuration>
                     <systemPropertyVariables>
                         <app.market-data.oracle.enabled>false</app.market-data.oracle.enabled>
+                        <app.arbitrage.enabled>false</app.arbitrage.enabled>
                     </systemPropertyVariables>
                 </configuration>
             </plugin>

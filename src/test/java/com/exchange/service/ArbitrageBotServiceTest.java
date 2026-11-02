@@ -30,6 +30,7 @@ class ArbitrageBotServiceTest {
     void should_use_configured_symbol_instead_of_hardcoded_btc_usdt() {
         ArbitrageBotService botService = new ArbitrageBotService(orderService, accountService, walletService, matchingManager, oracleService);
         ReflectionTestUtils.setField(botService, "symbol", "ETH/USDT");
+        ReflectionTestUtils.setField(botService, "enabled", true);
 
         when(oracleService.getExternalPrice("ETH/USDT")).thenReturn(new BigDecimal("3000"));
         when(matchingManager.getOrderBookBySymbol("ETH/USDT")).thenReturn(new OrderBook("ETH", "USDT"));
