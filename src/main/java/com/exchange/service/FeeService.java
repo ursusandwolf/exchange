@@ -10,10 +10,14 @@ public class FeeService {
     private static final BigDecimal MAKER_FEE_RATE = new BigDecimal("0.0005"); // 0.05%
 
     public BigDecimal calculateTakerFee(BigDecimal amount) {
-        return amount.multiply(TAKER_FEE_RATE);
+        return calculateFee(amount, TAKER_FEE_RATE);
     }
 
     public BigDecimal calculateMakerFee(BigDecimal amount) {
-        return amount.multiply(MAKER_FEE_RATE);
+        return calculateFee(amount, MAKER_FEE_RATE);
+    }
+
+    private BigDecimal calculateFee(BigDecimal amount, BigDecimal rate) {
+        return amount.multiply(rate);
     }
 }

@@ -6,9 +6,7 @@ import lombok.NoArgsConstructor;
 import lombok.ToString;
 
 import java.math.BigDecimal;
-import java.util.Collections;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -50,19 +48,6 @@ public class Wallet {
     public void credit(String assetSymbol, BigDecimal amount) {
         validateAmount(amount);
         balances.merge(assetSymbol, amount, BigDecimal::add);
-    }
-
-    /**
-     * Списывание средств с кошелька (с доступного баланса).
-     */
-    public void debit(String assetSymbol, BigDecimal amount) {
-        validateAmount(amount);
-        BigDecimal balance = balances.getOrDefault(assetSymbol, BigDecimal.ZERO);
-        if (balance.compareTo(amount) < 0) {
-            throw new IllegalArgumentException(
-                "Недостаточно средств " + assetSymbol + ". Баланс: " + balance + ", требуется: " + amount);
-        }
-        balances.put(assetSymbol, balance.subtract(amount));
     }
 
     /**
@@ -119,29 +104,6 @@ public class Wallet {
     public BigDecimal getReserved(String assetSymbol) {
         return reserved.getOrDefault(assetSymbol, BigDecimal.ZERO);
     }
-
-    /**
-     * Получение общего баланса (доступный + зарезервированный).
-     */
-    public BigDecimal getTotalBalance(String assetSymbol) {
-        return getBalance(assetSymbol).add(getReserved(assetSymbol));
-    }
-
-    /**
-     * Возвращает множество всех активов, имеющих ненулевой баланс.
-     */
-    public Set<String> getAssets() {
-        Set<String> assets = new java.util.HashSet<>(balances.keySet());
-        assets.addAll(reserved.keySet());
-        return Collections.unmodifiableSet(assets);
-    }
-
-    // TODO: Здесь можно добавить:
-    // - Поддержку нескольких валют одновременно с конвертацией
-    // - Аудит всех операций (история транзакций)
-    // - Интеграцию с внешними платёжными системами (для persistency)
-    // - Лимиты на вывод/пополнение
-    // - Подписку на события изменения баланса (Observer pattern)
 
     private void validateAmount(BigDecimal amount) {
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {

@@ -1,7 +1,9 @@
 package com.exchange.service;
 
+import com.exchange.model.TransactionRecord;
 import com.exchange.model.User;
 import com.exchange.model.Wallet;
+import com.exchange.repository.TransactionRecordRepository;
 import com.exchange.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -9,9 +11,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-
-import com.exchange.model.TransactionRecord;
-import com.exchange.repository.TransactionRecordRepository;
 import java.time.Instant;
 import java.util.List;
 
@@ -24,12 +23,40 @@ public class WalletService {
 
     @Transactional
     public void deposit(String userId, String asset, BigDecimal amount) {
+        mutate(userId, asset, amount, amount, "DEPOSIT", "External deposit", Wallet::credit);
+    }
+
+    @Transactional
+    public void credit(String userId, String asset, BigDecimal amount, String description) {
+        mutate(userId, asset, amount, amount, "CREDIT", description, Wallet::credit);
+    }
+
+    @Transactional
+    public void debitReserved(String userId, String asset, BigDecimal amount, String description) {
+        mutate(userId, asset, amount, amount.negate(), "DEBIT_RESERVED", description, Wallet::deductReserved);
+    }
+
+    @Transactional
+    public void reserve(String userId, String asset, BigDecimal amount, String description) {
+        mutate(userId, asset, amount, amount.negate(), "RESERVE", description, Wallet::reserve);
+    }
+
+    @Transactional
+    public void unreserve(String userId, String asset, BigDecimal amount, String description) {
+        mutate(userId, asset, amount, amount, "UNRESERVE", description, Wallet::unreserve);
+    }
+
+    private void mutate(String userId,
+                        String asset,
+                        BigDecimal walletAmount,
+                        BigDecimal auditAmount,
+                        String type,
+                        String description,
+                        WalletMutation mutation) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден: " + userId));
-        user.getWallet().credit(asset, amount);
-        
-        recordTransaction(userId, asset, amount, "DEPOSIT", "External deposit");
-        
+        mutation.apply(user.getWallet(), asset, walletAmount);
+        recordTransaction(userId, asset, auditAmount, type, description);
         userRepository.save(user);
     }
 
@@ -42,38 +69,6 @@ public class WalletService {
                 .description(description)
                 .timestamp(Instant.now())
                 .build());
-    }
-
-    @Transactional
-    public void credit(String userId, String asset, BigDecimal amount, String description) {
-        User user = userRepository.findById(userId).orElseThrow();
-        user.getWallet().credit(asset, amount);
-        recordTransaction(userId, asset, amount, "CREDIT", description);
-        userRepository.save(user);
-    }
-
-    @Transactional
-    public void debitReserved(String userId, String asset, BigDecimal amount, String description) {
-        User user = userRepository.findById(userId).orElseThrow();
-        user.getWallet().deductReserved(asset, amount);
-        recordTransaction(userId, asset, amount.negate(), "DEBIT_RESERVED", description);
-        userRepository.save(user);
-    }
-    
-    @Transactional
-    public void reserve(String userId, String asset, BigDecimal amount, String description) {
-        User user = userRepository.findById(userId).orElseThrow();
-        user.getWallet().reserve(asset, amount);
-        recordTransaction(userId, asset, amount.negate(), "RESERVE", description);
-        userRepository.save(user);
-    }
-
-    @Transactional
-    public void unreserve(String userId, String asset, BigDecimal amount, String description) {
-        User user = userRepository.findById(userId).orElseThrow();
-        user.getWallet().unreserve(asset, amount);
-        recordTransaction(userId, asset, amount, "UNRESERVE", description);
-        userRepository.save(user);
     }
 
     @Transactional(readOnly = true)
@@ -89,5 +84,10 @@ public class WalletService {
         return userRepository.findById(userId)
                 .map(User::getWallet)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
+    }
+
+    @FunctionalInterface
+    private interface WalletMutation {
+        void apply(Wallet wallet, String asset, BigDecimal amount);
     }
 }

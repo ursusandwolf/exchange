@@ -1,0 +1,315 @@
+================================================================================
+ CRYPTO EXCHANGE — АРХІТЕКТУРНЕ КОД-РЕВ’Ю + AI-КАРТА
+ Дата: 2026-11-02 | Ролі: Code Reviewer + Java Architect + Analyst
+ Репо: https://github.com/ursusandwolf/exchange
+================================================================================
+
+## Вердикт: ⚠️ мержити / здавати на рев’ю МОЖНА після усвідомлення ризиків
+         (критичних blocker-багів у matching/settlement за статичним аналізом
+          і зеленими тестами не знайдено; є архітектурні борги)
+
+**Кратко:** Модульний моноліт CEX-симуляції зі сильним ядром (lock → TX → match →
+afterCommit). Архітектура адекватна portfolio/навчанню. Головні ризики: порожній
+adjustReserve був stub (прибрано), over-reserved після partial LIMIT, H2+in-memory
+book = single-node, приватний fin-core, oracle шумить у тестах.
+
+Тести: mvn test → 37 run, 0 fail, 0 error (див. TEST_RESULTS.txt). EXIT=0.
+
+--------------------------------------------------------------------------------
+1. СТАДІЯ СПРИНТІВ (MIGRATION_PLAN + TODO + код)
+--------------------------------------------------------------------------------
+
+| Sprint / Phase              | Статус        | Доказ |
+|-----------------------------|---------------|-------|
+| Phase 1–2 Security/JPA      | DONE          | SecurityConfig, Jwt*, JPA entities |
+| Phase 3 Cancel/Portfolio    | DONE          | cancelOrder, portfolio, priceLimit |
+| Phase 4 WS/OHLCV/VT/Fees    | DONE          | MarketDataService, FeeService, VT |
+| Phase 5 Oracle/Bot/SL/TP    | DONE (partial)| ExternalPriceOracle + ArbitrageBot; MDS URL часто недоступний |
+| Phase 6 Frontend FSD        | DONE          | frontend/src FSD |
+| Sprint 1 fin-core types     | DONE          | Price/Quantity/InstrumentId + converters |
+| Sprint 2 Wallet Money types | NOT STARTED   | Wallet досі Map<String,BigDecimal> |
+| Sprint 3 MDS + Resilience4j | PARTIAL       | RestMarketDataQuoteClient є; CircuitBreaker немає |
+| Sprint 4 Docs/tests sync    | IN PROGRESS   | docs оновлені; цей звіт |
+
+Висновок: **продуктово ≈ Phase 6 / Sprint 1 done**. Наступний змістовний спринт —
+Sprint 2–3 (typed money + resilient MDS) або hardening concurrency/reserve.
+
+--------------------------------------------------------------------------------
+2. АДЕКВАТНІСТЬ АРХІТЕКТУРИ
+--------------------------------------------------------------------------------
+
+Стиль: **Layered Modular Monolith** (не повний Hexagonal).
+
+  Controllers → Services → Engine/Model + Repositories
+                ↘ Clients (MarketData)
+
+Адекватність для учбової CEX: **ТАК**.
+- Один процес, H2, in-memory OrderBook — правильний trade-off для демо.
+- Розділення MatchingEngine (pure calc) vs OrderService (orchestration) — сильне рішення.
+- Не тягнути мікросервіси / Kafka / CQRS — правильно (біль немає).
+
+Що віддаємо: HA, горизонтальне масштабування matching, durable order book,
+строгий audit на всіх шляхах (раніше seedDemoBalances обходив audit — виправлено).
+
+Опції (якби росли далі):
+  A) Залишити моноліт + PostgreSQL          ← рекомендую наступним кроком
+  B) Винести matching у окремий процес      ← лише при реальному multi-node
+  C) Event sourcing ордерів                 ← overkill зараз
+
+--------------------------------------------------------------------------------
+3. ПАТЕРНИ (що / де / навіщо)
+--------------------------------------------------------------------------------
+
+| Патерн              | Де                                      | Навіщо |
+|---------------------|-----------------------------------------|--------|
+| Facade              | OrderService                            | Єдина точка submit/cancel/OCO + locks/TX |
+| Repository          | *Repository (Spring Data)               | Persist без SQL-шумів |
+| DTO / Mapper        | dto/* + mapper/*                        | Не світити JPA entity в API |
+| Adapter             | RestMarketDataQuoteClient → interface   | Підміна джерела цін |
+| Strategy (легкий)   | OrderType + гілки в MatchingManager     | Різна активація SL/TP |
+| Factory Method      | Order.limitOrder/marketOrder/triggerOrder | Інваріанти створення |
+| Template (TX)       | TransactionTemplate + afterCommit       | Atomicity + sync пам’яті |
+| Observer (WS)       | MarketDataService broadcast             | Realtime UI |
+| DI / IoC            | Spring @Service/@Component              | Тестованість, зв’язність |
+| Optimistic Lock     | @Version User/Wallet/Order              | Lost update |
+| Filter Chain        | JwtAuthenticationFilter                 | Stateless auth |
+| Value Object (lib)  | fin-core Price/Quantity/InstrumentId    | Типобезпека грошей |
+
+--------------------------------------------------------------------------------
+4. UML КЛАСІВ / ІНТЕРФЕЙСІВ (псевдографіка)
+--------------------------------------------------------------------------------
+
+=== Domain ===
+
+  +------------------+ 1    1 +------------------+
+  | User             |--------| Wallet           |
+  |------------------|        |------------------|
+  | id               |        | ownerId          |
+  | username, email  |        | balances Map     |
+  | password, admin  |        | reserved Map     |
+  | tokenVersion     |        | version          |
+  | version          |        |+credit/debit/... |
+  +--------+---------+        +------------------+
+           | places
+           v
+  +------------------+        <<enum>> Side / OrderType / OrderStatus
+  | Order            |
+  |------------------|
+  | instrument ids   |
+  | qty, price, ...  |
+  | trigger, ocoGroup |
+  | reservedAmount   |
+  | status, version  |
+  +--------+---------+
+           | matched into
+           v
+  +------------------+
+  | Trade            |---- buyOrder / sellOrder ----> Order
+  | price, qty, fees |
+  +------------------+
+
+=== Engine ===
+
+  +-------------------+          +-------------------+
+  | OrderBook         |<--reads--| MatchingEngine    |
+  | bids / asks       |          | +match()          |
+  | FIFO levels       |          | uses FeeService   |
+  +-------------------+          +---------+---------+
+                                          |
+                                          v
+                                 +-------------------+
+                                 | MatchResult       |
+                                 | trades, remove,   |
+                                 | remainingOrder    |
+                                 +-------------------+
+
+=== Application (interfaces) ===
+
+  <<interface>> MarketDataQuoteClient
+        ^
+        | implements
+  RestMarketDataQuoteClient
+
+  Controllers ----> Services
+    OrderController ----> OrderService ----> MatchingManager
+                                         +-> MatchingEngine
+                                         +-> WalletService
+                                         +-> FeeService
+                                         +-> MarketDataService
+    AuthController  ----> AccountService / JwtService / PasswordReset*
+    Admin/User      ----> AccountService / WalletService
+
+--------------------------------------------------------------------------------
+5. CODE REVIEW FINDINGS
+--------------------------------------------------------------------------------
+
+### 🔴 Blocker
+(немає підтверджених blocker після cleanup + green tests)
+
+### 🟠 Major
+1. Partial LIMIT: після часткового fill `adjustReservedAmount` був порожнім stub
+   (видалено виклик). Поведінка: зайвий reserve може лишатись до cancel/full fill.
+   Де: OrderService (був ~418). Потрібен ОКНИЙ алгоритм зменшення reserve = filled.
+2. Single-node consistency: OrderBook у RAM; crash між commit і afterCommit рідкісний,
+   але можливий drift до restore.
+3. Security: /ws-exchange/** і /h2-console/** permitAll — ок для demo, не для prod.
+4. Приватний fin-core-lib — рев’юер без доступу не збере проєкт.
+
+### 🟡 Minor
+1. OrderService GOD-METHOD зона (~480 рядків): submit + OCO + trigger + cancel.
+2. MatchingManager.init: не-LIMIT → trigger pool (MARKET pending теоретично туди потрапить).
+3. Oracle @Scheduled під час тестів → ERROR-логи без fail.
+4. open-in-view=true warning.
+5. Fee rates захардкоджені в FeeService.
+
+### 💡 Idea
+- CircuitBreaker на MDS (Sprint 3).
+- PostgreSQL profile.
+- Розрізати OrderService на OrderPlacement / OrderTrigger / OrderCancel.
+
+### 👍 Удачно
+- Lock поза TX + TransactionTemplate + afterCommit sync.
+- MatchingEngine без side-effects на book.
+- OCO + trigger activation після commit.
+- DTO на межі API; JWT tokenVersion на reset.
+
+--------------------------------------------------------------------------------
+6. CLEANUP ВИКОНАНО (без вигаданої бізнес-логіки)
+--------------------------------------------------------------------------------
+
+| Зміна | Мотивація |
+|-------|-----------|
+| WalletService → єдиний private mutate() | DUP-SEMANTIC deposit/credit/reserve/... |
+| FeeService → calculateFee(rate) | DUP-EXACT taker/maker |
+| Видалено порожній adjustReservedAmount | DEAD stub (поведінка ідентична: noop) |
+| Видалено MatchingManager.getSymbols() | DEAD, 0 call sites |
+| AccountService.seedDemoBalances → walletService.deposit | єдиний шлях audit |
+| AccountServiceTest оновлено під новий конструктор | компіляція тестів |
+
+Не чіпали: алгоритм matching, API контракти, frontend.
+
+--------------------------------------------------------------------------------
+7. ТЕСТИ — ЧОГО НЕ ВИСТАЧАЄ
+--------------------------------------------------------------------------------
+
+Є (37): matching unit, OCO IT, order IT, wallet, auth/controllers, reset, rate limit.
+
+Бракує сценаріїв:
+- [ ] Partial LIMIT → перевірка reserved після fill
+- [ ] Concurrent submit двох потоків на одну пару
+- [ ] Cancel під час partial
+- [ ] BUY stop-loss / take-profit
+- [ ] Oracle down → bot no-op (без ERROR spam)
+- [ ] Recovery OrderBook після restart з PENDING LIMIT
+
+--------------------------------------------------------------------------------
+8. НАВЧАЛЬНІ МАТЕРІАЛИ (як читати код)
+--------------------------------------------------------------------------------
+
+Маршрут навчання (1–2 вечори):
+
+  Крок 1. Модель грошей
+    model/Wallet.java → reserve/unreserve/deductReserved
+    service/WalletService.java → audit ledger
+
+  Крок 2. Стакан
+    engine/OrderBook.java → bids/asks, best bid/ask, FIFO
+    Намалюй на папері 2 buy + 2 sell і простеж add/remove
+
+  Крок 3. Matching (чиста функція)
+    engine/MatchingEngine.match → MatchResult
+    Питання: чому engine НЕ викликає orderBook.add?
+
+  Крок 4. Оркестрація
+    OrderService.executeOrderTransaction
+    Порядок: save → reserve → match → settle → afterCommit sync
+
+  Крок 5. Concurrency story
+    synchronized(symbol) ЗОВНІ transactionTemplate
+    Чому не навпаки? (не тримати DB connection під lock wait інших)
+
+  Крок 6. Security
+    SecurityConfig + JwtAuthenticationFilter + tokenVersion
+
+  Крок 7. Frontend mirror
+    widgets/OrderBook.tsx + shared/api → ті самі символи/топики
+
+Міні-глосарій:
+  Maker  = ордер уже в стакані
+  Taker  = вхідний ордер, що знімає ліквідність
+  Reserve= блок коштів до fill/cancel
+  afterCommit = колбек Spring TX sync після успішного COMMIT
+
+--------------------------------------------------------------------------------
+9. AI MAP — карта для ШІ (легкі оновлення)
+--------------------------------------------------------------------------------
+
+Файл-якір для агентів: цей документ + doc/ARCHITECTURE.md + doc/REVIEW.md + AGENTS.md
+
+ПРАВИЛА ДЛЯ АГЕНТА:
+1. Не змінюй MatchingEngine side-effect політику (тільки MatchResult).
+2. Будь-яка зміна балансів → тільки через WalletService (audit).
+3. Новий тип ордера → Order factory + MatchingManager trigger rules + тести.
+4. Зовнішні HTTP → через client/* interface, не RestTemplate напряму в @Service.
+5. Тести: спочатку unit engine, потім OrderService* IT.
+6. Не коміть секрети; JWT_SECRET лише env.
+7. fin-core обов’язковий: mvn install з ursusandwolf/fin-core-lib перед build.
+
+КАРТА ПАКЕТІВ (куди класти зміни):
+
+  controller/   — тільки HTTP mapping + validation, 0 бізнес-логіки
+  service/      — use-cases
+  engine/       — matching algorithms (pure as possible)
+  model/        — JPA + domain invariants
+  dto/ + mapper/— API border
+  client/       — outbound adapters
+  config/       — Spring wiring, security, converters
+  exception/    — HTTP error translation
+
+ГАРЯЧІ ФАЙЛИ (високий churn / ризик):
+  OrderService.java, MatchingEngine.java, OrderBook.java,
+  Wallet.java, MatchingManager.java, SecurityConfig.java
+
+ХОЛОДНІ (рідко чіпати):
+  mappers, більшість DTO records, enums
+
+КОМАНДИ:
+  set JAVA_HOME=...corretto-21...
+  mvn test
+  mvn spring-boot:run
+  cd frontend && npm run dev
+
+--------------------------------------------------------------------------------
+10. РЕКОМЕНДОВАНІ НАСТУПНІ 3 КРОКИ
+--------------------------------------------------------------------------------
+
+1. Реалізувати коректний adjustReservedAmount після partial fill + тест.
+2. Єдина політика sync: trigger-pool і cancel теж лише afterCommit (зараз дві політики).
+3. Sprint 2: Money/CurrencyCode у Wallet АБО ADR «лишаємо BigDecimal» + MDS timeout/CB.
+
+--------------------------------------------------------------------------------
+11. ДОПОВНЕННЯ З ГЛИБШОГО АУДИТУ (субагенти)
+--------------------------------------------------------------------------------
+
+Архітектура ([Map patterns and architecture](31f919af-e7fd-4e15-889d-e412b1e6d5e0)):
+- Не hexagonal: Order = JPA entity і об’єкт у стакані одночасно.
+- MatchingEngine new у OrderService.init; RestTemplate new без timeout.
+- Trade не @Entity — журналу угод у БД немає.
+- CHANGELOG ще згадує «Binance Oracle» (застаріло).
+
+Аудит dead/dup ([Audit dead/dup Java code](d8bb8d03-6835-4451-b750-bbf48a83632a)):
+Follow-up cleanup (після першого проходу):
+- JwtService: прибрано unused generateToken overloads
+- AccountService.findByEmail, User.deposit
+- Wallet.debit / getTotalBalance / getAssets
+- OrderBook.getOrder / getQuantityAtPrice / OrderQueue.size
+- Trade.symbol + takerOrderId
+- порожня гілка if(activated) у cancelOcoGroupOrders
+- SYSTEM_FEES → OrderService.SYSTEM_FEE_USER у AdminController
+
+Не чіпали: розпил OrderService, extract match-хвоста (різні гілки trigger-check),
+TradingView multi-resolution (API контракт), interface MarketDataQuoteClient.
+
+--------------------------------------------------------------------------------
+Кінець звіту. Детальні Mermaid UML: doc/UML.md
+================================================================================

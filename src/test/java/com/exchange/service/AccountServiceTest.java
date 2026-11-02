@@ -23,20 +23,23 @@ class AccountServiceTest {
     @Mock
     private UserRepository userRepository;
 
+    @Mock
+    private WalletService walletService;
+
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     @Test
     void changePassword_updatesPassword_whenCurrentPasswordMatches() {
         User user = new User("alice", passwordEncoder.encode("oldpass"));
         when(userRepository.findById("user-1")).thenReturn(Optional.of(user));
-        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(userRepository.saveAndFlush(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        AccountService accountService = new AccountService(userRepository, passwordEncoder);
+        AccountService accountService = new AccountService(userRepository, passwordEncoder, walletService);
 
         accountService.changePassword("user-1", "oldpass", "newpass123");
 
         ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
-        verify(userRepository).save(captor.capture());
+        verify(userRepository).saveAndFlush(captor.capture());
         org.assertj.core.api.Assertions.assertThat(passwordEncoder.matches("newpass123", captor.getValue().getPassword()))
                 .isTrue();
     }
@@ -46,7 +49,7 @@ class AccountServiceTest {
         User user = new User("alice", passwordEncoder.encode("oldpass"));
         when(userRepository.findById("user-1")).thenReturn(Optional.of(user));
 
-        AccountService accountService = new AccountService(userRepository, passwordEncoder);
+        AccountService accountService = new AccountService(userRepository, passwordEncoder, walletService);
 
         assertThatThrownBy(() -> accountService.changePassword("user-1", "wrongpass", "newpass123"))
                 .isInstanceOf(IllegalArgumentException.class)

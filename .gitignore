@@ -36,3 +36,6 @@ htmlcov/
 .DS_Store
 Thumbs.db
 ```
+# Local test run output
+TEST_RESULTS.txt
+

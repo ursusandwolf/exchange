@@ -184,9 +184,7 @@ public class OrderService {
             order.cancel();
         }
 
-        if (order.isActive()) {
-            adjustReservedAmount(userId, order);
-        } else {
+        if (!order.isActive()) {
             releaseUnusedReserve(userId, order);
         }
         
@@ -318,9 +316,6 @@ public class OrderService {
                 releaseUnusedReserve(userId, sibling);
             } else {
                 matchingManager.removeTriggeredOrder(sibling.getId());
-                if (activated) {
-                    // OCO reserve is released only once on the executable leg.
-                }
             }
 
             sibling.cancel();
@@ -413,9 +408,6 @@ public class OrderService {
             walletService.reserve(userId, order.getBaseAsset().value(), order.getQuantity().value(), "Reserve for " + order.getType() + " SELL order " + order.getId());
             order.setReservedAmount(order.getQuantity().value());
         }
-    }
-
-    private void adjustReservedAmount(String userId, Order order) {
     }
 
     private void releaseUnusedReserve(String userId, Order order) {

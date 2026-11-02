@@ -18,6 +18,7 @@ import java.util.Optional;
 public class AccountService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final WalletService walletService;
 
     @Transactional
     public User registerUser(String username, String email, String password) {
@@ -99,12 +100,11 @@ public class AccountService {
 
     @Transactional
     public void seedDemoBalances(String userId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден: " + userId));
-
-        user.getWallet().credit("USDT", new BigDecimal("50000"));
-        user.getWallet().credit("BTC", new BigDecimal("1"));
-        userRepository.save(user);
+        if (userRepository.findById(userId).isEmpty()) {
+            throw new IllegalArgumentException("Пользователь не найден: " + userId);
+        }
+        walletService.deposit(userId, "USDT", new BigDecimal("50000"));
+        walletService.deposit(userId, "BTC", new BigDecimal("1"));
     }
 
     public Optional<User> findById(String userId) {
@@ -113,9 +113,5 @@ public class AccountService {
 
     public Optional<User> findByUsername(String username) {
         return userRepository.findByUsername(username);
-    }
-
-    public Optional<User> findByEmail(String email) {
-        return userRepository.findByEmail(email);
     }
 }

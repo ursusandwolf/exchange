@@ -23,8 +23,14 @@ public class ExternalPriceOracleService {
     @Value("${app.market-data.symbols:BTC/USDT}")
     private String symbolsConfig;
 
+    @Value("${app.market-data.oracle.enabled:true}")
+    private boolean oracleEnabled;
+
     @Scheduled(fixedRate = 5000) // Обновляем каждые 5 секунд
     public void fetchPrices() {
+        if (!oracleEnabled) {
+            return;
+        }
         for (String symbol : configuredSymbols()) {
             try {
                 BigDecimal price = marketDataQuoteClient.fetchPrice(symbol);

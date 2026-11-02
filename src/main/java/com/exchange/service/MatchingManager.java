@@ -9,7 +9,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -90,10 +89,6 @@ public class MatchingManager {
     public OrderBook getOrderBook(String baseAsset, String quoteAsset) {
         String symbol = baseAsset + "/" + quoteAsset;
         return orderBooks.computeIfAbsent(symbol, k -> new OrderBook(baseAsset, quoteAsset));
-    }
-
-    public List<String> getSymbols() {
-        return new ArrayList<>(orderBooks.keySet());
     }
 
     public OrderBook getOrderBookBySymbol(String symbol) {

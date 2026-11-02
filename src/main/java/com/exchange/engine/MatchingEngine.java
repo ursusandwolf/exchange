@@ -109,8 +109,8 @@ public class MatchingEngine {
                 ? feeService.calculateTakerFee(totalAmount) 
                 : feeService.calculateMakerFee(totalAmount);
 
-        return new Trade(buyOrder, sellOrder, tradePrice, tradeQuantity, 
-                                buyerFee, sellerFee, incomingOrder.getId(), contraOrder.getId());
+        return new Trade(buyOrder, sellOrder, tradePrice, tradeQuantity,
+                buyerFee, sellerFee, contraOrder.getId());
     }
 
     private Price determineTradePrice(Order order, Order contraOrder) {

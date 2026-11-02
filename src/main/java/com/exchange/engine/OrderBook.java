@@ -68,10 +68,6 @@ public class OrderBook {
         orderIndex.remove(order.getId());
     }
 
-    public Order getOrder(String orderId) {
-        return orderIndex.get(orderId);
-    }
-
     public boolean hasMatchingOrders(Order order) {
         if (order.getSide() == Side.BUY) {
             BigDecimal bestAsk = getBestAsk();
@@ -103,7 +99,6 @@ public class OrderBook {
         }
         public synchronized void removeOrder(Order order) { orders.remove(order); }
         public synchronized boolean isEmpty() { return orders.isEmpty(); }
-        public synchronized int size() { return orders.size(); }
         public synchronized BigDecimal getTotalQuantity() {
             return orders.stream()
                     .map(Order::getRemainingQuantity)
@@ -116,11 +111,5 @@ public class OrderBook {
         java.util.Map<BigDecimal, BigDecimal> result = new java.util.LinkedHashMap<>();
         targetMap.forEach((price, queue) -> result.put(price, queue.getTotalQuantity()));
         return result;
-    }
-
-    public synchronized BigDecimal getQuantityAtPrice(BigDecimal price, Side side) {
-        NavigableMap<BigDecimal, OrderQueue> targetMap = side == Side.BUY ? bids : asks;
-        OrderQueue queue = targetMap.get(price);
-        return queue != null ? queue.getTotalQuantity() : BigDecimal.ZERO;
     }
 }

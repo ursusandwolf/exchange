@@ -8,6 +8,7 @@ import com.exchange.enums.OrderStatus;
 import com.exchange.model.User;
 import com.exchange.repository.OrderRepository;
 import com.exchange.service.AccountService;
+import com.exchange.service.OrderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,15 +27,13 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class AdminController {
 
-    private static final String SYSTEM_FEE_USER = "SYSTEM_FEES";
-
     private final AccountService accountService;
     private final OrderRepository orderRepository;
 
     @GetMapping("/stats")
     @Transactional(readOnly = true)
     public AdminStatsResponse getStats() {
-        User feeUser = accountService.findByUsername(SYSTEM_FEE_USER).orElse(null);
+        User feeUser = accountService.findByUsername(OrderService.SYSTEM_FEE_USER).orElse(null);
         Map<String, BigDecimal> fees = (feeUser != null)
                 ? feeUser.getWallet().getBalances()
                 : Map.of();
