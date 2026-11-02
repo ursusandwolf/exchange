@@ -9,6 +9,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -39,5 +41,20 @@ class ArbitrageBotServiceTest {
 
         verify(oracleService).getExternalPrice("ETH/USDT");
         verify(matchingManager).getOrderBookBySymbol("ETH/USDT");
+    }
+
+    @Test
+    void should_noop_when_oracle_price_unavailable() {
+        ArbitrageBotService botService = new ArbitrageBotService(
+                orderService, accountService, walletService, matchingManager, oracleService);
+        ReflectionTestUtils.setField(botService, "symbol", "BTC/USDT");
+        ReflectionTestUtils.setField(botService, "enabled", true);
+
+        when(oracleService.getExternalPrice("BTC/USDT")).thenReturn(null);
+
+        botService.runArbitrage();
+
+        verify(matchingManager, never()).getOrderBookBySymbol(any());
+        verify(orderService, never()).submitOrder(any(), any());
     }
 }

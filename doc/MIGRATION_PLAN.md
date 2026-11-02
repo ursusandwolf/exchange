@@ -40,8 +40,9 @@
 ## Sprint 4: Finalization & Ecosystem Sync
 **Goal:** Ensure full compatibility and documentation.
 
-- [ ] **Task 4.1: API & DTO Alignment**
-  - Controllers still expose `String`/`BigDecimal` DTO (intentional JSON stability).
+- [~] **Task 4.1: API & DTO Alignment**
+  - Controllers expose `String`/`BigDecimal` wire DTO (intentional JSON stability).
+  - Domain already uses fin-core VOs; full typed wire DTO deferred without explicit API TZ.
 - [x] **Task 4.2: Integration Testing**
   - Order / OCO / wallet / fees / partial-fill reserve tests green.
 - [x] **Task 4.3: Documentation**

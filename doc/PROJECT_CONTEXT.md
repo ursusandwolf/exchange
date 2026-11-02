@@ -10,13 +10,15 @@
 - `@Version` на User / Wallet / Order; Virtual Threads
 - Maker/taker fees → `SYSTEM_FEES`; wallet audit
 - JWT, password reset, auth rate limit, admin API
-- Domain types з `fin-core` (`Price`, `Quantity`, `InstrumentId`)
-- Oracle + arbitrage bot (через market-data client)
+- Domain types з `fin-core` (`Price`, `Quantity`, `InstrumentId`, `Percent`, `Money` на credit)
+- Wallet storage: `Map<String, BigDecimal>` (JPA-friendly); mutations via `WalletService`
+- MDS client: timeouts + Resilience4j CircuitBreaker
+- Oracle + arbitrage bot; OrderBook recovery з PENDING / PARTIALLY_FILLED на старті
 
 ### Frontend
 - FSD: pages / widgets / features / entities / shared
-- WebSocket (STOMP): book, trades, candles
-- TradingView Lightweight Charts + UDF backend
+- Shared STOMP broker, RequireAuth/Admin, typed DTOs, shared UI kit
+- WebSocket: book, trades, candles; TradingView Lightweight Charts + UDF
 
 ## Docs for reviewers
 
@@ -24,6 +26,6 @@ README → `doc/ARCHITECTURE.md` → `doc/UML.md` → `doc/REVIEW.md` → `doc/S
 
 ## Pending (optional next)
 
-- Circuit breaker на MDS client
-- Wallet balances → typed `Money` / `CurrencyCode` (Sprint 2 у `MIGRATION_PLAN.md`)
+- Sprint 4.1: typed wire DTO (лише з явним ТЗ — JSON контракт зараз String/BigDecimal)
+- JWT httpOnly cookie (потрібні зміни backend + frontend)
 - Production DB (PostgreSQL) замість H2 in-memory

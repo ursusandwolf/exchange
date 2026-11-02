@@ -1,21 +1,22 @@
 package com.exchange.service;
 
 import com.exchange.dto.OrderRequest;
+import com.exchange.enums.OrderStatus;
 import com.exchange.enums.OrderType;
 import com.exchange.enums.Side;
-import com.exchange.model.User;
+import com.exchange.model.Order;
 import com.exchange.model.Trade;
+import com.exchange.model.User;
 import com.exchange.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;
 
 import java.math.BigDecimal;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
-
-import org.springframework.test.context.ActiveProfiles;
 
 @SpringBootTest
 @ActiveProfiles("test")
@@ -79,5 +80,35 @@ class OrderServiceIntegrationTest {
 
         assertThat(walletService.getReserved(seller.getId(), "ETH"))
                 .isEqualByComparingTo("1");
+    }
+
+    @Test
+    void cancelAfterPartialFill_shouldReleaseRemainingReserve() {
+        User seller = accountService.registerUser("CancelSeller_" + System.currentTimeMillis(), "password123");
+        User buyer = accountService.registerUser("CancelBuyer_" + System.currentTimeMillis(), "password123");
+        walletService.deposit(seller.getId(), "SOL", new BigDecimal("3"));
+        walletService.deposit(buyer.getId(), "USDT", new BigDecimal("100000"));
+
+        orderService.submitOrder(seller, new OrderRequest(
+                "SOL", "USDT", Side.SELL, OrderType.LIMIT,
+                new BigDecimal("3"), new BigDecimal("100"), null, null));
+
+        orderService.submitOrder(buyer, new OrderRequest(
+                "SOL", "USDT", Side.BUY, OrderType.LIMIT,
+                new BigDecimal("1"), new BigDecimal("100"), null, null));
+
+        Order openSell = orderService.getUserOrders(seller.getId()).stream()
+                .filter(order -> order.getStatus() == OrderStatus.PARTIALLY_FILLED)
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(walletService.getReserved(seller.getId(), "SOL")).isEqualByComparingTo("2");
+
+        boolean cancelled = orderService.cancelOrder(seller.getId(), openSell.getId());
+
+        assertThat(cancelled).isTrue();
+        assertThat(walletService.getReserved(seller.getId(), "SOL")).isEqualByComparingTo("0");
+        assertThat(walletService.getBalance(seller.getId(), "SOL")).isEqualByComparingTo("2");
+        assertThat(orderService.getUserOrders(seller.getId()).get(0).getStatus()).isEqualTo(OrderStatus.CANCELLED);
     }
 }

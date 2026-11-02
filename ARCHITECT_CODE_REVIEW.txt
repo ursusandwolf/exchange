@@ -24,15 +24,14 @@ book = single-node, приватний fin-core, oracle шумить у тест
 | Phase 1–2 Security/JPA      | DONE          | SecurityConfig, Jwt*, JPA entities |
 | Phase 3 Cancel/Portfolio    | DONE          | cancelOrder, portfolio, priceLimit |
 | Phase 4 WS/OHLCV/VT/Fees    | DONE          | MarketDataService, FeeService, VT |
-| Phase 5 Oracle/Bot/SL/TP    | DONE (partial)| ExternalPriceOracle + ArbitrageBot; MDS URL часто недоступний |
-| Phase 6 Frontend FSD        | DONE          | frontend/src FSD |
+| Phase 5 Oracle/Bot/SL/TP    | DONE          | ExternalPriceOracle + ArbitrageBot + MDS client |
+| Phase 6 Frontend FSD        | DONE          | FSD + shared WS/UI/guards (FRONTEND_REVIEW) |
 | Sprint 1 fin-core types     | DONE          | Price/Quantity/InstrumentId + converters |
-| Sprint 2 Wallet Money types | NOT STARTED   | Wallet досі Map<String,BigDecimal> |
-| Sprint 3 MDS + Resilience4j | PARTIAL       | RestMarketDataQuoteClient є; CircuitBreaker немає |
-| Sprint 4 Docs/tests sync    | IN PROGRESS   | docs оновлені; цей звіт |
+| Sprint 2 Wallet Money types | DONE (hybrid) | credit(Money)+ValidationUtils; maps лишаються BigDecimal |
+| Sprint 3 MDS + Resilience4j | DONE          | timeouts + CircuitBreaker на RestMarketDataQuoteClient |
+| Sprint 4 Docs/tests sync    | DONE (~4.1)   | docs/tests; wire DTO String/BigDecimal навмисно |
 
-Висновок: **продуктово ≈ Phase 6 / Sprint 1 done**. Наступний змістовний спринт —
-Sprint 2–3 (typed money + resilient MDS) або hardening concurrency/reserve.
+Висновок: **Phase 1–6 + Sprint 1–3 ≈ done**. Опційно далі: PostgreSQL, JWT cookies, typed wire DTO (ТЗ).
 
 --------------------------------------------------------------------------------
 2. АДЕКВАТНІСТЬ АРХІТЕКТУРИ
@@ -283,9 +282,9 @@ Sprint 2–3 (typed money + resilient MDS) або hardening concurrency/reserve.
 10. РЕКОМЕНДОВАНІ НАСТУПНІ 3 КРОКИ
 --------------------------------------------------------------------------------
 
-1. Реалізувати коректний adjustReservedAmount після partial fill + тест.
-2. Єдина політика sync: trigger-pool і cancel теж лише afterCommit (зараз дві політики).
-3. Sprint 2: Money/CurrencyCode у Wallet АБО ADR «лишаємо BigDecimal» + MDS timeout/CB.
+1. ✅ adjustReservedAmount + partial-fill / cancel-after-partial тести.
+2. ✅ afterCommit sync для book / trigger / cancel.
+3. Опційно: PostgreSQL profile; JWT httpOnly cookies; typed wire DTO лише з ТЗ.
 
 --------------------------------------------------------------------------------
 11. ДОПОВНЕННЯ З ГЛИБШОГО АУДИТУ (субагенти)
