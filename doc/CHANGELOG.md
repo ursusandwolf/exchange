@@ -2,7 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased] - 2026-06-03
+## [Unreleased] - 2026-11-02
+
+### Added
+- **Docs**: refreshed README, Architecture, Documentation; full Mermaid UML (class / sequence / ER).
+- **Review**: `doc/REVIEW.md` checklist + GitHub PR template; `main` synced as canonical branch.
+
+## [0.1.0] - 2026-06-03
 
 ### Added
 - **Core Domain**: Decoupled `ExchangeService` into `AccountService`, `WalletService`, `OrderService`, and `MatchingManager`.

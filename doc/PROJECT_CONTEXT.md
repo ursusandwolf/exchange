@@ -1,33 +1,29 @@
-# Project Context: Gemini Exchange Simulation
+# Project Context: Crypto Exchange Simulation
 
-## Current State
-A fully functional simulation of a Centralized Exchange (CEX) with a modern Java backend and React frontend.
+## Current state
 
-### Backend (Java 21, Spring Boot 3.2)
-- **Matching Engine**: In-memory FIFO engine. Supports LIMIT, MARKET, STOP_LOSS, and TAKE_PROFIT orders.
-- **Concurrency**: Fine-grained locking per trading pair outside of database transactions. Utilizes Virtual Threads.
-- **Consistency**: Post-commit memory synchronization ensuring OrderBook and Database stay in sync.
-- **Audit**: Every balance change is recorded in `transaction_records`.
-- **Fees**: Maker/Taker fee system with a dedicated `SYSTEM_FEES` account.
-- **Integrations**: Binance Price Oracle for real BTC/USDT price data.
-- **Automation**: Arbitrage bot that reacts to price deviations between internal and external markets.
+Повноцінна учбова CEX: Java 21 / Spring Boot 3 backend + React 19 frontend.
 
-### Frontend (React 19, Vite, Tailwind, TypeScript)
-- **FSD Architecture**: Feature-Sliced Design.
-- **Real-time**: WebSockets (STOMP) for OrderBook, Recent Trades, and Candlestick updates.
-- **Charts**: Integration with TradingView Lightweight Charts.
-- **Trading**: Advanced order form with validation and support for trigger prices.
-- **Portfolio**: Real-time balance updates and transaction history.
+### Backend
+- In-memory FIFO matching: LIMIT, MARKET, STOP_LOSS, TAKE_PROFIT, OCO
+- Per-symbol locks поза TX; `TransactionTemplate` + post-commit sync стакана
+- `@Version` на User / Wallet / Order; Virtual Threads
+- Maker/taker fees → `SYSTEM_FEES`; wallet audit
+- JWT, password reset, auth rate limit, admin API
+- Domain types з `fin-core` (`Price`, `Quantity`, `InstrumentId`)
+- Oracle + arbitrage bot (через market-data client)
 
-### Admin
-- Basic dashboard to monitor exchange profit from collected fees.
+### Frontend
+- FSD: pages / widgets / features / entities / shared
+- WebSocket (STOMP): book, trades, candles
+- TradingView Lightweight Charts + UDF backend
 
-## Recent Changes
-- Refactored `ExchangeService` into domain-specific services (`OrderService`, `AccountService`, `WalletService`, `MatchingManager`).
-- Implemented Stop-Loss and Take-Profit logic with background activation.
-- Switched to LAZY fetching for Wallet balances with safe transactional access.
-- Integrated `sonner` for non-blocking UI notifications.
-- Added full audit logging for all wallet operations.
-- Added comprehensive unit tests for critical services (`OrderService`, `WalletService`).
+## Docs for reviewers
 
-## Pending Items
+README → `doc/ARCHITECTURE.md` → `doc/UML.md` → `doc/REVIEW.md` → `doc/SECURITY.md`
+
+## Pending (optional next)
+
+- Circuit breaker на MDS client
+- Wallet balances → typed `Money` / `CurrencyCode` (Sprint 2 у `MIGRATION_PLAN.md`)
+- Production DB (PostgreSQL) замість H2 in-memory

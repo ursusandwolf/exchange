@@ -1,84 +1,117 @@
-# Архитектура учебного проекта: Crypto Exchange Simulation (Spring Boot)
+# Архітектура: Crypto Exchange Simulation
 
-Этот проект представляет собой упрощенную симуляцию централизованной криптовалютной биржи (CEX), построенную на стеке **Java 21 + Spring Boot 3 + JPA + React 19**.
+Стек: **Java 21 · Spring Boot 3.2 · Spring Data JPA · Spring Security · WebSocket · React 19 (FSD)**.  
+Мета: учбова CEX з коректним matching, резервами, комісіями та realtime UI.
 
-## 1. Общая структура системы (UML)
+---
 
-Ниже представлена структура основных компонентов и их взаимодействие.
+## 1. Шари
 
-### Диаграмма классов и слоев
-
-```mermaid
-+-------------------------------------------------------------+
-|                        WEB LAYER                            |
-|      [OrderController] [UserController] [AuthController]    |
-+------------------------------|------------------------------+
-                               v
-+-------------------------------------------------------------+
-|                      SERVICE LAYER                          |
-|  [OrderService] [AccountService] [WalletService]            |
-|  [MatchingManager] [MarketDataService] [FeeService]         |
-+------------------------------|------------------------------+
-                               v
-+------------------+  +----------------+  +-------------------+
-|  ENGINE LAYER    |  |  PERSISTENCE   |  |   DOMAIN MODELS   |
-| [MatchingEngine] |  | [Repositories] |  |  [User] [Wallet]  |
-|  [OrderBook]     |  |                |  |  [Order] [Trade]  |
-+------------------+  +----------------+  +-------------------+
+```text
+┌─────────────────────────────────────────────────────────┐
+│  Web: Controllers · JWT Filter · WebSocketConfig        │
+├─────────────────────────────────────────────────────────┤
+│  Application: Order / Wallet / Account / MarketData /   │
+│               Fee / PasswordReset / Arbitrage / Oracle  │
+├──────────────────────┬──────────────────────────────────┤
+│  Engine (in-memory)  │  Persistence (JPA / H2)          │
+│  MatchingEngine      │  User, Wallet, Order, Candle…    │
+│  OrderBook           │  Repositories + @Version         │
+│  MatchResult         │                                  │
+└──────────────────────┴──────────────────────────────────┘
 ```
 
----
+Залежності строго вниз: controller → service → engine/model/repository.  
+DTO + Mapper на межі API (без витоку JPA-сутностей назовні).
 
-## 2. Роль Spring Boot в проекте
-
-### А. Dependency Injection (DI)
-Мы используем **Constructor Injection**. Spring автоматически управляет зависимостями между сервисами.
-
-### Б. Управление транзакциями (`TransactionTemplate` & `@Transactional`)
-Для обеспечения атомарности и правильной работы блокировок:
-1.  **Concurrency Control**: Блокировка `synchronized` по символу торговой пары происходит в `OrderService.submitOrder` СНАРУЖИ транзакции.
-2.  **Atomicity**: Внутри блокировки используется `TransactionTemplate` для выполнения матчинга и обновления балансов в одной транзакции.
-
-### В. Spring Data JPA
-Использование Optimistic Locking (`@Version`) в `Order`, `Wallet` и `User` предотвращает коллизии при параллельном доступе.
+Детальні UML: [UML.md](UML.md).
 
 ---
 
-## 3. Описание ключевых сервисов
+## 2. Ключові сервіси
 
-| Сервис | Описание |
-| :--- | :--- |
-| **OrderService** | Фасад для работы с ордерами. Координирует блокировки, транзакции и вызов движка. |
-| **AccountService** | Управление пользователями и их регистрацией. |
-| **WalletService** | Бизнес-логика кошельков: пополнение, списание, резервирование. |
-| **MatchingManager** | Управление состоянием стаканов (OrderBook) в памяти и их восстановление из БД. |
-| **MatchingEngine** | Алгоритмический движок. Возвращает MatchResult без модификации объектов в памяти. |
-| **MarketDataService** | Рассылка обновлений через WebSockets и агрегация свечей. |
-
----
-
-## 4. Жизненный цикл ордера (Data Flow)
-
-1.  **Request**: Пользователь отправляет ордер.
-2.  **Locking**: `OrderService` захватывает монитор для данной пары.
-3.  **Transaction Start**: Открывается транзакция через `TransactionTemplate`.
-4.  **Matching**: `MatchingEngine.match()` вычисляет сделки (MatchResult).
-5.  **Settlement**: Обновление балансов покупателя, продавца и системного кошелька комиссий (`SYSTEM_FEES`).
-6.  **Persistence**: Сохранение ордеров и сделок в БД.
-7.  **Post-Commit**: После успешного коммита стакан в памяти синхронизируется, и данные рассылаются по WebSocket.
-8.  **Unlock**: Блокировка снимается.
+| Компонент | Роль |
+|-----------|------|
+| `OrderService` | Фасад ордерів: lock по символу, `TransactionTemplate`, matching, cancel, OCO |
+| `MatchingManager` | In-memory стакани + пул trigger-ордерів; restore з БД на старті |
+| `MatchingEngine` | Чистий розрахунок угод → `MatchResult` (без side-effects на book) |
+| `WalletService` | Credit/debit/reserve/release + audit (`TransactionRecord`) |
+| `FeeService` | Maker/taker; settlement у `SYSTEM_FEES` |
+| `MarketDataService` | OHLCV, WS broadcast (book / trades / candles) |
+| `AccountService` | Register, roles, change password |
+| `JwtService` + filter | Bearer JWT (`userId`, `username`, `tokenVersion`) |
+| `PasswordResetService` | One-time hashed token, інкремент `tokenVersion` |
+| `ExternalPriceOracleService` | Котирування через `MarketDataQuoteClient` |
+| `ArbitrageBotService` | Демо-бот на дельті oracle vs внутрішній ринок |
 
 ---
 
-## 5. Безопасность (Security)
+## 3. Lifecycle ордера
 
-*   **JWT Authentication**: Доступ к API защищен Bearer-токенами.
-*   **BCrypt Hashing**: Пароли пользователей хранятся в зашифрованном виде.
-*   **Validation**: Входящие данные на фронтенде (Zod) и бэкенде (Jakarta Validation).
-*   **Data Masking**: Использование DTO (Records) для API ответов.
+1. HTTP → валідація DTO (Jakarta Validation).
+2. `synchronized` по ключу пари (`base/quote`) — **поза** транзакцією.
+3. Усередині `TransactionTemplate`:
+   - persist `PENDING`;
+   - reserve у `Wallet`;
+   - `MatchingEngine.match()`;
+   - settle балансів + fees;
+   - оновити статуси / filled.
+4. `afterCommit`: застосувати дельти до `OrderBook`, WS publish.
+5. Unlock.
 
-## 6. Надежность и Целостность (Reliability)
+**Чому так:** lock поза TX уникає утримання БД-з’єднання під час очікування; post-commit sync уникає «пам’ять попереду БД».
 
-*   **Thread Safety**: Блокировки на уровне торговых пар и потокобезопасные коллекции.
-*   **State Recovery**: Автоматическое восстановление стаканов при старте приложения.
-*   **Optimistic Locking**: Предотвращение Lost Updates в БД.
+---
+
+## 4. Concurrency & цілісність
+
+| Механізм | Де |
+|----------|----|
+| Fine-grained lock per symbol | `OrderService.locks` |
+| Optimistic locking | `@Version` на `User`, `Wallet`, `Order` |
+| Virtual Threads | `spring.threads.virtual.enabled=true` |
+| Thread-safe collections | `ConcurrentHashMap` / skip-list у book |
+| Auth rate limit | in-memory `AuthRateLimiter` → 429 |
+
+---
+
+## 5. Типи ордерів
+
+| Тип | Поведінка |
+|-----|-----------|
+| `LIMIT` | У стакан; match якщо ціна перетинає протилежну сторону |
+| `MARKET` | Негайний match; опційний `priceLimit` (slippage) |
+| `STOP_LOSS` / `TAKE_PROFIT` | У trigger-пул; активація за last trade price |
+| `OCO` | Дві linked legs, один reserve; друга скасовується після активації першої |
+
+FIFO на одному ціновому рівні.
+
+---
+
+## 6. Frontend (FSD)
+
+```text
+frontend/src/
+  app/          # shell, layout
+  pages/        # login, register, dashboard, admin, reset
+  widgets/      # OrderBook, Chart, Portfolio, TradingForm…
+  features/     # place-order
+  entities/     # user / auth store
+  shared/api/   # axios + 401 logout, React Query
+```
+
+Realtime: SockJS + STOMP → ті самі топики, що публікує `MarketDataService`.
+
+---
+
+## 7. Зовнішні залежності
+
+- **`fin-core`** (`com.alex.fin`): `Price`, `Quantity`, `InstrumentId`, `CurrencyCode` + JPA converters.
+- **Market-data service** (опційно): `MARKET_DATA_BASE_URL`; без нього oracle/bot деградують gracefully за конфігом клієнта.
+
+---
+
+## 8. Нецілі (out of scope)
+
+Реальні депозити/вивід, KYC, мультирегіон, Kafka-bus, production HA matching cluster, cold wallet.
+Це симуляція для портфоліо та рев’ю алгоритмів/архітектури.
